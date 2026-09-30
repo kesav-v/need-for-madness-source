@@ -8,6 +8,7 @@ Does **not** vendor PufferLib (large upstream). Apply onto a checkout at:
 
 ```bash
 # from repo root
+./pufferlib_nfm/colab_deps.sh          # libomp, mesa GL, X11 (once per runtime)
 git clone --depth 1 https://github.com/PufferAI/PufferLib.git
 ./pufferlib_nfm/apply.sh
 cd c && make models gym -j && cd ..

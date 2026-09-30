@@ -59,6 +59,9 @@ new_nvcc = (
 if old_nvcc in text:
     text = text.replace(old_nvcc, new_nvcc, 1)
 
+# 2b) Linux OpenMP: upstream -lomp5 is missing on Colab/Ubuntu; use -lomp.
+text = text.replace('OMP_LIB=-lomp5', 'OMP_LIB=-lomp', 1)
+
 # 3) bash3-safe PUFFER_$ENV
 text2, n = re.subn(
     r"EXTRA_CFLAGS\+=\(-DPUFFER_\$\{ENV\^\^\}\)",
