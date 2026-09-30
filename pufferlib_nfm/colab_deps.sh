@@ -6,6 +6,7 @@ sudo apt-get install -y --no-install-recommends \
   build-essential \
   clang \
   ccache \
+  libgomp1 \
   libomp-dev \
   libgl1-mesa-dev \
   libx11-dev \
