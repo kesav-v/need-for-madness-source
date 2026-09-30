@@ -18,17 +18,15 @@ cd PufferLib && ./build.sh nfm && ./puffer train
 ## Dump `.nfmst` from a `.bin` checkpoint
 
 ```bash
-./pufferlib_nfm/dump_nfmst.sh PufferLib/checkpoints/nfm/<run>/<step>.bin out.nfmst
-# then: ./generate_video.sh out.nfmst
+# via record.sh (preferred; replaces --forward)
+./record.sh 11 0 out.nfmst --policy PufferLib/checkpoints/nfm/<run>/<step>.bin
+./record.sh 11 0 out.nfmst path/to/weights.bin   # trailing *.bin also works
+
+# helper
+./pufferlib_nfm/dump_nfmst.sh path/to/weights.bin out.nfmst --stage 11 --car 0
 ```
 
-Or manually (after `./build.sh nfm --cpu`):
-
-```bash
-cd PufferLib
-./nfm checkpoints/nfm/.../foo.bin --headless --eval_episodes=1 \
-  --env.record_path=$PWD/../out.nfmst --env.stall_cut=0 --env.max_steps=8000
-```
+## Files
 
 | Path | Role |
 |------|------|
