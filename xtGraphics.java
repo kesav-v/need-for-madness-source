@@ -400,6 +400,7 @@ public class xtGraphics extends Panel implements Runnable
     int flyr;
     int flyrdest;
     int flang;
+    private volatile boolean stopRunner;
 
     public xtGraphics(final Medium m, final CarDefine cd, final Graphics2D rd, final GameSparker app) {
         this.fase = 111;
@@ -649,6 +650,14 @@ public class xtGraphics extends Panel implements Runnable
         this.runtyp = 176;
         (this.runner = new Thread(this)).start();
         this.loadimages();
+        if (Madness.recordNoRender) {
+            this.intertrack = new RadicalMod();
+            this.dnload += 44;
+            // No sounds.zip / AudioSystem — keeps sim silent and avoids audio device UI.
+            this.runner = null;
+            this.runtyp = 0;
+            return;
+        }
         this.intertrack = new RadicalMod("music/interface.zip");
         this.dnload += 44;
         this.loadsounds();
@@ -1206,7 +1215,7 @@ public class xtGraphics extends Panel implements Runnable
     @Override
     public void run() {
         boolean b = false;
-        while (this.runtyp > 0) {
+        while (this.runtyp > 0 && !this.stopRunner) {
             if (this.runtyp >= 1 && this.runtyp <= 140) {
                 this.hipnoload(this.runtyp, false);
             }
@@ -1522,7 +1531,9 @@ public class xtGraphics extends Panel implements Runnable
         this.fastestlap = 0;
         this.sendstat = 0;
         if (this.fase == 2 || this.fase == -22) {
-            this.sortcars(n);
+            if (!Madness.replaying) {
+                this.sortcars(n);
+            }
         }
         if (this.fase == 22) {
             for (int j = 0; j < 2; ++j) {
@@ -2949,11 +2960,17 @@ public class xtGraphics extends Panel implements Runnable
         }
         if (b) {
             this.runtyp = runtyp;
+            this.stopRunner = false;
             (this.runner = new Thread(this)).start();
         }
         this.loadstrack(runtyp, s, n);
         if (b) {
-            this.runner.stop();
+            this.stopRunner = true;
+            try {
+                this.runner.join(1000); // Wait up to 1 second for thread to finish
+            } catch (InterruptedException e) {
+                // Ignore interruption
+            }
             this.runner = null;
             this.runtyp = 0;
         }
@@ -2975,8 +2992,15 @@ public class xtGraphics extends Panel implements Runnable
         }
         this.app.setCursor(new Cursor(0));
         this.pcontin = 0;
-        this.mutem = false;
-        this.mutes = false;
+        // Keep muted for autorace recording/sim unless --music was passed.
+        if (Madness.autorace && Madness.recordMute) {
+            this.mutem = true;
+            this.mutes = true;
+        }
+        else {
+            this.mutem = false;
+            this.mutes = false;
+        }
         this.fase = 6;
     }
 
@@ -7103,7 +7127,7 @@ public class xtGraphics extends Panel implements Runnable
                     if (b) {
                         n7 = 17.0f;
                     }
-                    this.sc[j] = (int)(Math.random() * (24.0f + 8.0f * (n / n7)));
+                    this.sc[j] = (int)(this.m.nextUnit() * (24.0f + 8.0f * (n / n7)));
                     if (this.sc[j] >= 16) {
                         final int[] sc = this.sc;
                         final int n8 = j;
@@ -7125,7 +7149,7 @@ public class xtGraphics extends Panel implements Runnable
                     if (n == 17 && n9 > 0.5) {
                         n9 = 0.5f;
                     }
-                    if (n9 > Math.random()) {
+                    if (n9 > this.m.nextUnit()) {
                         array[j] = false;
                     }
                     if (this.gmode == 1) {
@@ -7173,7 +7197,7 @@ public class xtGraphics extends Panel implements Runnable
                         b2 = true;
                     }
                 }
-                if (!b2 && (Math.random() > Math.random() || this.gmode != 0)) {
+                if (!b2 && (this.m.nextUnit() > this.m.nextUnit() || this.gmode != 0)) {
                     this.sc[n5] = 11;
                 }
                 boolean b3 = false;
@@ -7182,7 +7206,7 @@ public class xtGraphics extends Panel implements Runnable
                         b3 = true;
                     }
                 }
-                if (!b3 && (Math.random() > Math.random() || this.gmode != 0)) {
+                if (!b3 && (this.m.nextUnit() > this.m.nextUnit() || this.gmode != 0)) {
                     this.sc[n6] = 14;
                 }
             }
@@ -7204,7 +7228,7 @@ public class xtGraphics extends Panel implements Runnable
                         b5 = true;
                     }
                 }
-                if (!b5 && (Math.random() > Math.random() || this.gmode != 0)) {
+                if (!b5 && (this.m.nextUnit() > this.m.nextUnit() || this.gmode != 0)) {
                     this.sc[n5] = 12;
                 }
                 boolean b6 = false;
@@ -7213,7 +7237,7 @@ public class xtGraphics extends Panel implements Runnable
                         b6 = true;
                     }
                 }
-                if (!b6 && (Math.random() > Math.random() || this.gmode != 0)) {
+                if (!b6 && (this.m.nextUnit() > this.m.nextUnit() || this.gmode != 0)) {
                     this.sc[n6] = 10;
                 }
             }
@@ -7224,7 +7248,7 @@ public class xtGraphics extends Panel implements Runnable
                         b7 = true;
                     }
                 }
-                if (!b7 && (Math.random() > Math.random() || this.gmode != 0)) {
+                if (!b7 && (this.m.nextUnit() > this.m.nextUnit() || this.gmode != 0)) {
                     this.sc[n5] = 11;
                 }
                 boolean b8 = false;
@@ -7233,7 +7257,7 @@ public class xtGraphics extends Panel implements Runnable
                         b8 = true;
                     }
                 }
-                if (!b8 && (Math.random() > Math.random() || this.gmode != 0)) {
+                if (!b8 && (this.m.nextUnit() > this.m.nextUnit() || this.gmode != 0)) {
                     this.sc[n6] = 13;
                 }
             }
@@ -7244,7 +7268,7 @@ public class xtGraphics extends Panel implements Runnable
                         b9 = true;
                     }
                 }
-                if (!b9 && (Math.random() > Math.random() || this.gmode != 0)) {
+                if (!b9 && (this.m.nextUnit() > this.m.nextUnit() || this.gmode != 0)) {
                     this.sc[n5] = 13;
                 }
                 boolean b10 = false;
@@ -7253,7 +7277,7 @@ public class xtGraphics extends Panel implements Runnable
                         b10 = true;
                     }
                 }
-                if (!b10 && (Math.random() > Math.random() || this.gmode != 0)) {
+                if (!b10 && (this.m.nextUnit() > this.m.nextUnit() || this.gmode != 0)) {
                     this.sc[n6] = 12;
                 }
             }
@@ -7267,7 +7291,7 @@ public class xtGraphics extends Panel implements Runnable
                     }
                     if (this.cd.include[n19] && this.sc[0] != n19 + 16) {
                         int n21;
-                        for (n21 = (int)(1.0 + Math.random() * (n2 - 1)); array[n21]; n21 = (int)(1.0 + Math.random() * (n2 - 1))) {}
+                        for (n21 = (int)(1.0 + this.m.nextUnit() * (n2 - 1)); array[n21]; n21 = (int)(1.0 + this.m.nextUnit() * (n2 - 1))) {}
                         array[n21] = true;
                         this.sc[n21] = n19 + 16;
                         if (++n18 == n2 - 1) {
@@ -7286,7 +7310,7 @@ public class xtGraphics extends Panel implements Runnable
                     }
                     if (this.cd.include[n23] && this.sc[0] != n23 + 16) {
                         int n25;
-                        for (n25 = (int)(1.0 + Math.random() * (n2 - 1)); array[n25]; n25 = (int)(1.0 + Math.random() * (n2 - 1))) {}
+                        for (n25 = (int)(1.0 + this.m.nextUnit() * (n2 - 1)); array[n25]; n25 = (int)(1.0 + this.m.nextUnit() * (n2 - 1))) {}
                         array[n25] = true;
                         this.sc[n25] = n23 + 16;
                         if (++n22 == n2 - 1) {
@@ -7547,6 +7571,34 @@ public class xtGraphics extends Panel implements Runnable
     }
 
     public void stat(final Mad mad, final ContO contO, final CheckPoints checkPoints, final Control control, final boolean b) {
+        // Physics-only sim: race-end / holdit bookkeeping, no HUD drawing into the unused buffer.
+        if (Madness.recordNoRender) {
+            if (this.holdit) {
+                ++this.holdcnt;
+                if (this.holdcnt > 250) {
+                    this.fase = -2;
+                }
+            }
+            else {
+                this.holdcnt = 0;
+                if (checkPoints.wasted == this.nplayers - 1 && this.nplayers != 1) {
+                    checkPoints.haltall = true;
+                    this.holdit = true;
+                    this.winner = true;
+                }
+                if (!this.holdit) {
+                    for (int i = 0; i < this.nplayers; ++i) {
+                        if (checkPoints.clear[i] == checkPoints.nlaps * checkPoints.nsp && checkPoints.pos[i] == 0) {
+                            checkPoints.haltall = true;
+                            this.holdit = true;
+                            this.winner = (i == this.im);
+                            break;
+                        }
+                    }
+                }
+            }
+            return;
+        }
         if (this.holdit) {
             int n = 250;
             if (this.fase == 7001) {
@@ -8400,13 +8452,17 @@ public class xtGraphics extends Panel implements Runnable
             }
         }
         if (this.m.lightn != -1) {
-            final int available = this.strack.sClip.stream.available();
             this.m.lton = false;
-            if (available <= 6380001 && available > 5368001) {
-                this.m.lton = true;
-            }
-            if (available <= 2992001 && available > 1320001) {
-                this.m.lton = true;
+            // Stage 26 originally keyed flashes to SuperClip PCM remaining bytes.
+            // RadicalMod (ffplay) advances a virtual cursor once per game tick.
+            if (this.strack != null) {
+                final int available = this.strack.pollLightningAvailable();
+                if (available <= 6380001 && available > 5368001) {
+                    this.m.lton = true;
+                }
+                if (available <= 2992001 && available > 1320001) {
+                    this.m.lton = true;
+                }
             }
         }
     }
@@ -8417,7 +8473,8 @@ public class xtGraphics extends Panel implements Runnable
         if (n2 > n) {
             n2 = n;
         }
-        final int n4 = (int)(98.0f * (n2 / n));
+        // n2/n are ints; keep the multiply in float or the bar stays 0 until full damage
+        final int n4 = (int)(98.0f * n2 / n);
         array[0] = 662;
         array2[0] = 11;
         array[1] = 662;
@@ -8637,16 +8694,7 @@ public class xtGraphics extends Panel implements Runnable
         array3[6] = n5 + 50;
         int n7;
         if (!b) {
-            int n6 = 0;
-            if (checkPoints.x[n] - checkPoints.opx[this.im] >= 0) {
-                n6 = 180;
-            }
-            // NOTE: semantics changed
-            float divisor = checkPoints.x[n] - checkPoints.opx[this.im];
-            if (divisor == 0.0f) {
-              divisor = 1;
-            }
-            n7 = (int)(90 + n6 + Math.atan((checkPoints.z[n] - checkPoints.opz[this.im]) / (divisor)) / 0.017453292519943295);
+            n7 = (int)(Math.toDegrees(Math.atan2(checkPoints.z[n] - checkPoints.opz[this.im], checkPoints.x[n] - checkPoints.opx[this.im])) + 90);
         }
         else {
             int alocked = 0;
@@ -8670,7 +8718,7 @@ public class xtGraphics extends Panel implements Runnable
             if (checkPoints.opx[alocked] - checkPoints.opx[this.im] >= 0) {
                 n9 = 180;
             }
-            n7 = (int)(90 + n9 + Math.atan((checkPoints.opz[alocked] - checkPoints.opz[this.im]) / (checkPoints.opx[alocked] - checkPoints.opx[this.im])) / 0.017453292519943295);
+            n7 = (int)(Math.toDegrees(Math.atan2(checkPoints.opz[alocked] - checkPoints.opz[this.im], checkPoints.opx[alocked] - checkPoints.opx[this.im])) + 90);
             if (this.multion == 0) {
                 this.drawcs(13, "[                                ]", 76, 67, 240, 0);
                 this.drawcs(13, this.cd.names[this.sc[alocked]], 0, 0, 0, 0);
@@ -9288,6 +9336,9 @@ public class xtGraphics extends Panel implements Runnable
     }
 
     public void crash(final float n, final int n2) {
+        if (Madness.recordNoRender && !Madness.recordFullFx) {
+            return;
+        }
         if (this.bfcrash == 0) {
             if (n2 == 0) {
                 if (Math.abs(n) > 25.0f && Math.abs(n) < 170.0f) {
@@ -9341,6 +9392,9 @@ public class xtGraphics extends Panel implements Runnable
     }
 
     public void skid(final int n, final float n2) {
+        if (Madness.recordNoRender && !Madness.recordFullFx) {
+            return;
+        }
         if (this.bfcrash == 0 && this.bfskid == 0 && n2 > 150.0f) {
             if (n == 0) {
                 if (!this.mutes) {
@@ -9404,6 +9458,10 @@ public class xtGraphics extends Panel implements Runnable
                     this.sturn1 = 0;
                 }
             }
+            if (Madness.recordNoRender && !Madness.recordFullFx) {
+                this.bfscrape = 5;
+                return;
+            }
             if (!this.mutes) {
                 this.scrape[n4].play();
             }
@@ -9412,6 +9470,9 @@ public class xtGraphics extends Panel implements Runnable
     }
 
     public void gscrape(final int n, final int n2, final int n3) {
+        if (Madness.recordNoRender && !Madness.recordFullFx) {
+            return;
+        }
         if ((this.bfsc1 == 0 || this.bfsc2 == 0) && Math.sqrt(n * n + n2 * n2 + n3 * n3) / 10.0 > 15.0) {
             if (this.bfsc1 == 0) {
                 if (!this.mutes) {

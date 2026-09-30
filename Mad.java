@@ -253,6 +253,8 @@ public class Mad
     }
 
     public void drive(final Control control, final ContO contO, final Trackers trackers, final CheckPoints checkPoints) {
+        final SimProfiler prof = SimProfiler.active;
+        long _pt = (prof != null) ? System.nanoTime() : 0L;
         int n = 1;
         int n2 = 1;
         boolean zyinv = false;
@@ -636,6 +638,10 @@ public class Mad
                 }
             }
         }
+        if (prof != null) {
+            prof.add("drv.controls", System.nanoTime() - _pt);
+            _pt = System.nanoTime();
+        }
         final float[] array = new float[4];
         final float[] array2 = new float[4];
         final float[] array3 = new float[4];
@@ -678,6 +684,12 @@ public class Mad
             final int n21 = n18;
             array6[n21] += (this.scz[0] + this.scz[1] + this.scz[2] + this.scz[3]) / 4.0f;
         }
+        if (System.getenv("NFM_YLOG") != null && this.im == 5 && contO.z > 33500 && contO.z < 34200) {
+            System.err.println("POSTINT im=5 arr3=" + array3[0] + "," + array3[1] + "," + array3[2] + "," + array3[3] + " scy=" + this.scy[0] + "," + this.scy[1] + "," + this.scy[2] + "," + this.scy[3] + " mt=" + this.mtouch);
+        }
+        if (System.getenv("NFM_YLOG") != null && this.im == 0 && this.hitmag >= 900 && this.hitmag <= 2300) {
+            System.err.println("D0 POSTINT hm=" + this.hitmag + " mt=" + this.mtouch + " rng=" + this.m.rngCalls + " scy=" + this.scy[0] + "," + this.scy[1] + "," + this.scy[2] + "," + this.scy[3]);
+        }
         int ncx = (contO.x - trackers.sx) / 3000;
         if (ncx > trackers.ncx) {
             ncx = trackers.ncx;
@@ -698,6 +710,10 @@ public class Mad
             if (Math.abs(trackers.zy[n24]) != 90 && Math.abs(trackers.xy[n24]) != 90 && Math.abs(contO.x - trackers.x[n24]) < trackers.radx[n24] && Math.abs(contO.z - trackers.z[n24]) < trackers.radz[n24] && (!trackers.decor[n24] || this.m.resdown != 2 || this.xt.multion != 0)) {
                 n22 = trackers.skd[n24];
             }
+        }
+        if (prof != null) {
+            prof.add("drv.wheels", System.nanoTime() - _pt);
+            _pt = System.nanoTime();
         }
         if (this.mtouch) {
             float n25 = this.cd.grip[this.cn] - Math.abs(this.txz - contO.xz) * this.speed / 250.0f;
@@ -811,7 +827,13 @@ public class Mad
                         if (n22 != 0) {
                             n38 = 1.2f;
                         }
+                        if (System.getenv("NFM_DRVRNG") != null && this.im == 2 && this.m.rngCalls >= 221290L && this.m.rngCalls <= 221320L) {
+                            System.err.println("GATE65 im=2 w=" + n31 + " dcnt=" + this.dcnt + " n22=" + n22 + " rng=" + this.m.rngCalls);
+                        }
                         if (this.m.random() > 0.65) {
+                            if (System.getenv("NFM_SKIDDUST") != null && this.im == 2) {
+                                System.err.println("SKIDDUST im=2 n=" + n31 + " dcnt=" + this.dcnt + " n22=" + n22 + " cap=" + this.capsized + " mt=" + this.mtouch + " rng=" + this.m.rngCalls + " y=" + array3[n31]);
+                            }
                             contO.dust(n31, array[n31], array3[n31], array2[n31], (int)this.scx[n31], (int)this.scz[n31], n38 * this.cd.simag[this.cn], (int)this.tilt, this.capsized && this.mtouch);
                             if (this.im == this.xt.im && !this.capsized) {
                                 this.xt.skid(n22, (float)Math.sqrt(this.scx[n31] * this.scx[n31] + this.scz[n31] * this.scz[n31]));
@@ -819,6 +841,9 @@ public class Mad
                         }
                     }
                     else {
+                        if (System.getenv("NFM_DRVRNG") != null && this.im == 2 && this.m.rngCalls >= 221290L && this.m.rngCalls <= 221320L) {
+                            System.err.println("GATELOW im=2 w=" + n31 + " dcnt=" + this.dcnt + " n22=" + n22 + " rng=" + this.m.rngCalls);
+                        }
                         if (n22 == 1 && this.m.random() > 0.8) {
                             contO.dust(n31, array[n31], array3[n31], array2[n31], (int)this.scx[n31], (int)this.scz[n31], 1.1f * this.cd.simag[this.cn], (int)this.tilt, this.capsized && this.mtouch);
                         }
@@ -873,7 +898,23 @@ public class Mad
         else if (this.skid != 2) {
             this.skid = 2;
         }
-        int n40 = 0;
+        if (prof != null) {
+            prof.add("drv.grip", System.nanoTime() - _pt);
+            _pt = System.nanoTime();
+        }
+                if (System.getenv("NFM_YLOG") != null && this.im == 0 && this.hitmag >= 900 && this.hitmag <= 2300) {
+            int pts=0, body=0;
+            for (int pi=0;pi<contO.npl;pi++) {
+                pts += contO.p[pi].n;
+                if (contO.p[pi].wz==0) body += contO.p[pi].n;
+            }
+            long sum=0;
+            for (int pi=0;pi<contO.npl;pi++) if (contO.p[pi].wz==0)
+              for (int pj=0;pj<contO.p[pi].n;pj++)
+                sum += contO.p[pi].ox[pj]*1315423911L + contO.p[pi].oy[pj]*2654435761L + contO.p[pi].oz[pj];
+            System.err.println("D0 AFTERGRIP hm=" + this.hitmag + " mt=" + this.mtouch + " n22=" + n22 + " rng=" + this.m.rngCalls + " scy=" + this.scy[0] + "," + this.scy[1] + "," + this.scy[2] + "," + this.scy[3] + " npl=" + contO.npl + " pts=" + pts + " body=" + body + " clrad=" + this.cd.clrad[this.cn] + " key=" + contO.keyx[0] + "," + contO.keyz[0] + " mesh=" + sum + " xz=" + contO.xz);
+        }
+int n40 = 0;
         final boolean[] array7 = new boolean[4];
         final boolean[] array8 = new boolean[4];
         final boolean[] array9 = new boolean[4];
@@ -931,9 +972,49 @@ public class Mad
                 }
             }
         }
-        int n51 = 0;
+        if (prof != null) {
+            prof.add("drv.ground", System.nanoTime() - _pt);
+            _pt = System.nanoTime();
+        }
+                if (System.getenv("NFM_DMGLOG") != null && this.im == 0 && this.hitmag >= 1600 && this.hitmag <= 2300) {
+            System.err.println("D0 POSTGROUND hm=" + this.hitmag + " rng=" + this.m.rngCalls);
+        }
+int n51 = 0;
+        if (System.getenv("NFM_YLOG") != null && this.im == 5 && contO.z > 33500 && contO.z < 34200) {
+            System.err.println("PRETRACK im=5 arr3=" + array3[0] + "," + array3[1] + "," + array3[2] + "," + array3[3] + " scy=" + this.scy[0] + "," + this.scy[1] + "," + this.scy[2] + "," + this.scy[3] + " scx=" + this.scx[0] + "," + this.scx[1] + "," + this.scx[2] + "," + this.scx[3] + " n22=" + n22);
+        }
         for (int n52 = 0; n52 < trackers.sect[ncx][ncz].length; ++n52) {
             final int n53 = trackers.sect[ncx][ncz][n52];
+            // Car XZ AABB from current wheel points (recomputed: walls can move wheels mid-loop).
+            float carMinX = array[0];
+            float carMaxX = array[0];
+            float carMinZ = array2[0];
+            float carMaxZ = array2[0];
+            for (int wi = 1; wi < 4; ++wi) {
+                if (array[wi] < carMinX) {
+                    carMinX = array[wi];
+                }
+                if (array[wi] > carMaxX) {
+                    carMaxX = array[wi];
+                }
+                if (array2[wi] < carMinZ) {
+                    carMinZ = array2[wi];
+                }
+                if (array2[wi] > carMaxZ) {
+                    carMaxZ = array2[wi];
+                }
+            }
+            final int tMinX = trackers.x[n53] - trackers.radx[n53];
+            final int tMaxX = trackers.x[n53] + trackers.radx[n53];
+            final int tMinZ = trackers.z[n53] - trackers.radz[n53];
+            final int tMaxZ = trackers.z[n53] + trackers.radz[n53];
+            // Same open-interval rule as per-wheel: x > tMin && x < tMax.
+            if (carMaxX <= tMinX || carMinX >= tMaxX || carMaxZ <= tMinZ || carMinZ >= tMaxZ) {
+                continue;
+            }
+            if (System.getenv("NFM_DMGLOG") != null && this.im == 0 && this.hitmag >= 1600 && this.hitmag <= 2300 && this.m.rngCalls >= 12550L && this.m.rngCalls <= 12560L) {
+                System.err.println("TSECT im=0 idx=" + n53 + " skd=" + trackers.skd[n53] + " xy=" + trackers.xy[n53] + " zy=" + trackers.zy[n53] + " y=" + trackers.y[n53] + " rng=" + this.m.rngCalls);
+            }
             int n54 = 0;
             int n55 = 0;
             for (int n56 = 0; n56 < 4; ++n56) {
@@ -963,6 +1044,9 @@ public class Mad
                             contO.dust(n56, array[n56], array3[n56], array2[n56], (int)this.scx[n56], (int)this.scz[n56], n58 * this.cd.simag[this.cn], 0, this.capsized && this.mtouch);
                         }
                         array3[n56] = trackers.y[n53];
+                        if (System.getenv("NFM_TRACK") != null && (this.im == 2 || this.im == 5)) {
+                            System.err.println("TRACKFLAT im=" + this.im + " w=" + n56 + " idx=" + n53 + " y=" + trackers.y[n53] + " skd=" + trackers.skd[n53] + " arr=" + array[n56] + "," + array3[n56] + "," + array2[n56] + " scy=" + this.scy[n56] + " n22=" + n22);
+                        }
                         if (this.capsized && (trackers.skd[n53] == 0 || trackers.skd[n53] == 1)) {
                             contO.sprk(array[n56], array3[n56], array2[n56], this.scx[n56], this.scy[n56], this.scz[n56], 1);
                             if (this.im == this.xt.im) {
@@ -999,11 +1083,14 @@ public class Mad
                             final int n64 = n56;
                             ++array12[n64];
                         }
-                        if (trackers.skd[n53] == 5 && this.m.random() > this.m.random()) {
-                            final int[] array13 = this.crank[0];
-                            final int n65 = n56;
-                            ++array13[n65];
-                        }
+                        if (trackers.skd[n53] == 5) {
+                            if (System.getenv("NFM_DMGLOG") != null && this.im == 0 && this.hitmag>=1600) System.err.println("SKD5HIT im=0 rng=" + this.m.rngCalls);
+                            if (this.m.random() > this.m.random()) {
+                                final int[] array13 = this.crank[0];
+                                final int n65 = n56;
+                                ++array13[n65];
+                            }
+                            }
                         if (this.crank[0][n56] > 1) {
                             contO.sprk(array[n56], array3[n56], array2[n56], this.scx[n56], this.scy[n56], this.scz[n56], 0);
                             if (this.im == this.xt.im) {
@@ -1021,7 +1108,8 @@ public class Mad
                         if (n67 < 1.1) {
                             n67 = 1.1f;
                         }
-                        this.regz(n56, Math.abs(this.scz[n56] * n67 * trackers.dam[n53]), contO);
+                        if (System.getenv("NFM_DMGLOG") != null && this.im == 0 && this.hitmag >= 1600 && this.hitmag <= 2300) System.err.println("WALLREGZ java rng=" + this.m.rngCalls + " skd=" + trackers.skd[n53]);
+this.regz(n56, Math.abs(this.scz[n56] * n67 * trackers.dam[n53]), contO);
                         final float[] scz3 = this.scz;
                         final int n68 = n56;
                         scz3[n68] += Math.abs(this.scz[n56] * n67);
@@ -1046,11 +1134,14 @@ public class Mad
                             final int n71 = n56;
                             ++array15[n71];
                         }
-                        if (trackers.skd[n53] == 5 && this.m.random() > this.m.random()) {
-                            final int[] array16 = this.crank[1];
-                            final int n72 = n56;
-                            ++array16[n72];
-                        }
+                        if (trackers.skd[n53] == 5) {
+                            if (System.getenv("NFM_DMGLOG") != null && this.im == 0 && this.hitmag>=1600) System.err.println("SKD5HIT im=0 rng=" + this.m.rngCalls);
+                            if (this.m.random() > this.m.random()) {
+                                final int[] array16 = this.crank[1];
+                                final int n72 = n56;
+                                ++array16[n72];
+                            }
+                            }
                         if (this.crank[1][n56] > 1) {
                             contO.sprk(array[n56], array3[n56], array2[n56], this.scx[n56], this.scy[n56], this.scz[n56], 0);
                             if (this.im == this.xt.im) {
@@ -1068,7 +1159,8 @@ public class Mad
                         if (n74 < 1.1) {
                             n74 = 1.1f;
                         }
-                        this.regz(n56, -Math.abs(this.scz[n56] * n74 * trackers.dam[n53]), contO);
+                        if (System.getenv("NFM_DMGLOG") != null && this.im == 0 && this.hitmag >= 1600 && this.hitmag <= 2300) System.err.println("WALLREGZ java rng=" + this.m.rngCalls + " skd=" + trackers.skd[n53]);
+this.regz(n56, -Math.abs(this.scz[n56] * n74 * trackers.dam[n53]), contO);
                         final float[] scz4 = this.scz;
                         final int n75 = n56;
                         scz4[n75] -= Math.abs(this.scz[n56] * n74);
@@ -1093,11 +1185,14 @@ public class Mad
                             final int n78 = n56;
                             ++array18[n78];
                         }
-                        if (trackers.skd[n53] == 5 && this.m.random() > this.m.random()) {
-                            final int[] array19 = this.crank[2];
-                            final int n79 = n56;
-                            ++array19[n79];
-                        }
+                        if (trackers.skd[n53] == 5) {
+                            if (System.getenv("NFM_DMGLOG") != null && this.im == 0 && this.hitmag>=1600) System.err.println("SKD5HIT im=0 rng=" + this.m.rngCalls);
+                            if (this.m.random() > this.m.random()) {
+                                final int[] array19 = this.crank[2];
+                                final int n79 = n56;
+                                ++array19[n79];
+                            }
+                            }
                         if (this.crank[2][n56] > 1) {
                             contO.sprk(array[n56], array3[n56], array2[n56], this.scx[n56], this.scy[n56], this.scz[n56], 0);
                             if (this.im == this.xt.im) {
@@ -1140,11 +1235,14 @@ public class Mad
                             final int n85 = n56;
                             ++array21[n85];
                         }
-                        if (trackers.skd[n53] == 5 && this.m.random() > this.m.random()) {
-                            final int[] array22 = this.crank[3];
-                            final int n86 = n56;
-                            ++array22[n86];
-                        }
+                        if (trackers.skd[n53] == 5) {
+                            if (System.getenv("NFM_DMGLOG") != null && this.im == 0 && this.hitmag>=1600) System.err.println("SKD5HIT im=0 rng=" + this.m.rngCalls);
+                            if (this.m.random() > this.m.random()) {
+                                final int[] array22 = this.crank[3];
+                                final int n86 = n56;
+                                ++array22[n86];
+                            }
+                            }
                         if (this.crank[3][n56] > 1) {
                             contO.sprk(array[n56], array3[n56], array2[n56], this.scx[n56], this.scy[n56], this.scz[n56], 0);
                             if (this.im == this.xt.im) {
@@ -1256,6 +1354,10 @@ public class Mad
                 n40 = 4;
             }
         }
+        if (prof != null) {
+            prof.add("drv.trackers", System.nanoTime() - _pt);
+            _pt = System.nanoTime();
+        }
         if (n51 == 4) {
             this.mtouch = true;
         }
@@ -1334,6 +1436,13 @@ public class Mad
             else {
                 n105 = (int)(Math.acos(n113) / 0.017453292519943295 * n112);
             }
+        }
+        if (System.getenv("NFM_ACOS") != null && (this.im == 2 || this.im == 5)) {
+            final double d02 = Math.sqrt((array2[0]-array2[2])*(array2[0]-array2[2])+(array3[0]-array3[2])*(array3[0]-array3[2])+(array[0]-array[2])*(array[0]-array[2]));
+            final double n107b = d02 / (Math.abs(contO.keyz[0])+Math.abs(contO.keyz[2]));
+            final double d13 = Math.sqrt((array2[1]-array2[3])*(array2[1]-array2[3])+(array3[1]-array3[3])*(array3[1]-array3[3])+(array[1]-array[3])*(array[1]-array[3]));
+            final double n109b = d13 / (Math.abs(contO.keyz[1])+Math.abs(contO.keyz[3]));
+            System.err.println("ACOS im=" + this.im + " n102=" + n102 + " n103=" + n103 + " n107=" + n107b + " n109=" + n109b + " d02=" + d02 + " keyz=" + contO.keyz[0] + "," + contO.keyz[2] + " arr0=" + array[0] + "," + array3[0] + "," + array2[0] + " arr2=" + array[2] + "," + array3[2] + "," + array2[2]);
         }
         if (b2) {
             int abs;
@@ -1426,6 +1535,9 @@ public class Mad
             this.cntouch = 0;
         }
         contO.y = (int)((array3[0] + array3[1] + array3[2] + array3[3]) / 4.0f - grat * this.m.cos(this.pzy) * this.m.cos(this.pxy) + n6);
+        if (System.getenv("NFM_YLOG") != null && this.im == 5) {
+            System.err.println("YLOG im=5 arr3=" + array3[0] + "," + array3[1] + "," + array3[2] + "," + array3[3] + " cy=" + contO.y + " pzy=" + this.pzy + " pxy=" + this.pxy + " hit=" + this.hitmag + " scy=" + this.scy[0] + "," + this.scy[1] + "," + this.scy[2] + "," + this.scy[3]);
+        }
         int n115;
         if (zyinv) {
             n115 = -1;
@@ -1487,12 +1599,22 @@ public class Mad
             this.tilt = 0.0f;
         }
         if (this.wtouch && n22 == 2) {
+            if (System.getenv("NFM_BNC") != null && this.im == 2) {
+                System.err.println("BNC2 im=2 rng=" + this.m.rngCalls + " zy=" + contO.zy);
+            }
             contO.zy += (int)((this.m.random() * 6.0f * this.speed / this.cd.swits[this.cn][2] - 3.0f * this.speed / this.cd.swits[this.cn][2]) * (this.cd.bounce[this.cn] - 0.3));
             contO.xy += (int)((this.m.random() * 6.0f * this.speed / this.cd.swits[this.cn][2] - 3.0f * this.speed / this.cd.swits[this.cn][2]) * (this.cd.bounce[this.cn] - 0.3));
         }
         if (this.wtouch && n22 == 1) {
+            if (System.getenv("NFM_BNC") != null && this.im == 2) {
+                System.err.println("BNC1 im=2 rng=" + this.m.rngCalls + " zy=" + contO.zy);
+            }
             contO.zy += (int)((this.m.random() * 4.0f * this.speed / this.cd.swits[this.cn][2] - 2.0f * this.speed / this.cd.swits[this.cn][2]) * (this.cd.bounce[this.cn] - 0.3));
             contO.xy += (int)((this.m.random() * 4.0f * this.speed / this.cd.swits[this.cn][2] - 2.0f * this.speed / this.cd.swits[this.cn][2]) * (this.cd.bounce[this.cn] - 0.3));
+        }
+        if (prof != null) {
+            prof.add("drv.pose", System.nanoTime() - _pt);
+            _pt = System.nanoTime();
         }
         if (this.hitmag >= this.cd.maxmag[this.cn] && !this.dest) {
             this.distruct(contO);
@@ -1874,6 +1996,9 @@ public class Mad
                 }
             }
         }
+        if (prof != null) {
+            prof.add("drv.checkpoints", System.nanoTime() - _pt);
+        }
     }
 
     public void distruct(final ContO contO) {
@@ -1885,6 +2010,9 @@ public class Mad
     }
 
     public int regy(final int n, float n2, final ContO contO) {
+        final int hm0 = this.hitmag;
+        final SimProfiler prof = SimProfiler.active;
+        final long _pt = (prof != null) ? System.nanoTime() : 0L;
         int n3 = 0;
         boolean b = true;
         if (this.xt.multion == 1 && this.xt.im != this.im) {
@@ -1898,7 +2026,9 @@ public class Mad
         }
         n2 *= this.cd.dammult[this.cn];
         if (n2 > 100.0f) {
-            this.rpd.recy(n, n2, this.mtouch, this.im);
+            if (!Madness.recordNoRender || Madness.recordFullFx) {
+                this.rpd.recy(n, n2, this.mtouch, this.im);
+            }
             n2 -= 100.0f;
             int n4 = 0;
             int n5 = 0;
@@ -2037,10 +2167,20 @@ public class Mad
                 }
             }
         }
+        if (prof != null) {
+            prof.add("drv.reg", System.nanoTime() - _pt);
+        }
+        if (System.getenv("NFM_DMGLOG") != null && this.hitmag != hm0) {
+            System.err.println("DMG regy im=" + this.im + " cn=" + this.cn + " wheel=" + n + " n2=" + n2 + " dhit=" + (this.hitmag - hm0) + " hitmag=" + hm0 + "->" + this.hitmag + " rng=" + this.m.rngCalls);
+            if (System.getenv("NFM_PZY") != null && this.im == 2) System.err.println("PZY after regy im=2 wheel=" + n + " pzy=" + this.pzy + " hit=" + this.hitmag + " rng=" + this.m.rngCalls);
+        }
         return n3;
     }
 
     public int regx(final int n, float n2, final ContO contO) {
+        final int hm0 = this.hitmag;
+        final SimProfiler prof = SimProfiler.active;
+        final long _pt = (prof != null) ? System.nanoTime() : 0L;
         int n3 = 0;
         boolean b = true;
         if (this.xt.multion == 1 && this.xt.im != this.im) {
@@ -2054,7 +2194,9 @@ public class Mad
         }
         n2 *= this.cd.dammult[this.cn];
         if (Math.abs(n2) > 100.0f) {
-            this.rpd.recx(n, n2, this.im);
+            if (!Madness.recordNoRender || Madness.recordFullFx) {
+                this.rpd.recx(n, n2, this.im);
+            }
             if (n2 > 100.0f) {
                 n2 -= 100.0f;
             }
@@ -2124,11 +2266,22 @@ public class Mad
                 }
             }
         }
+        if (prof != null) {
+            prof.add("drv.reg", System.nanoTime() - _pt);
+        }
+        if (System.getenv("NFM_DMGLOG") != null && this.hitmag != hm0) {
+            System.err.println("DMG regx im=" + this.im + " cn=" + this.cn + " wheel=" + n + " n2=" + n2 + " dhit=" + (this.hitmag - hm0) + " hitmag=" + hm0 + "->" + this.hitmag + " rng=" + this.m.rngCalls);
+        }
         return n3;
     }
 
     public int regz(final int n, float n2, final ContO contO) {
+        final int hm0 = this.hitmag;
+        final SimProfiler prof = SimProfiler.active;
+        final long _pt = (prof != null) ? System.nanoTime() : 0L;
         int n3 = 0;
+        int nhit = 0;
+        final long rngEnter = this.m.rngCalls;
         boolean b = true;
         if (this.xt.multion == 1 && this.xt.im != this.im) {
             b = false;
@@ -2141,7 +2294,9 @@ public class Mad
         }
         n2 *= this.cd.dammult[this.cn];
         if (Math.abs(n2) > 100.0f) {
-            this.rpd.recz(n, n2, this.im);
+            if (!Madness.recordNoRender || Madness.recordFullFx) {
+                this.rpd.recz(n, n2, this.im);
+            }
             if (n2 > 100.0f) {
                 n2 -= 100.0f;
             }
@@ -2156,6 +2311,7 @@ public class Mad
                 float ctmag = 0.0f;
                 for (int j = 0; j < contO.p[i].n; ++j) {
                     if (contO.p[i].wz == 0 && this.py(contO.keyx[n], contO.p[i].ox[j], contO.keyz[n], contO.p[i].oz[j]) < this.cd.clrad[this.cn]) {
+                        ++nhit;
                         ctmag = n2 / 20.0f * this.m.random();
                         final int[] oz = contO.p[i].oz;
                         final int n4 = j;
@@ -2210,6 +2366,13 @@ public class Mad
                     }
                 }
             }
+        }
+        if (prof != null) {
+            prof.add("drv.reg", System.nanoTime() - _pt);
+        }
+        if (System.getenv("NFM_DMGLOG") != null && this.hitmag != hm0) {
+            System.err.println("DMG regz im=" + this.im + " cn=" + this.cn + " wheel=" + n + " n2=" + n2 + " dhit=" + (this.hitmag - hm0) + " hitmag=" + hm0 + "->" + this.hitmag + " rng=" + this.m.rngCalls);
+            System.err.println("REGZVERTS im=" + this.im + " wheel=" + n + " nhit=" + nhit + " npl=" + contO.npl + " enter=" + rngEnter + " exit=" + this.m.rngCalls);
         }
         return n3;
     }

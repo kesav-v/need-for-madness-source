@@ -81,6 +81,8 @@ public class Control
     int apunch;
     boolean exitattack;
     int avoidnlev;
+    /** When true, human player ignores steering/brake and holds accelerate. */
+    static boolean autodrive = false;
 
     public Control(final Medium m) {
         this.left = false;
@@ -187,6 +189,18 @@ public class Control
                 this.mutes = false;
             }
         }
+    }
+
+    /** Override keyboard: hold gas, no steer/brake/handbrake. */
+    public void applyAutodrive() {
+        if (!Control.autodrive) {
+            return;
+        }
+        this.left = false;
+        this.right = false;
+        this.up = true;
+        this.down = false;
+        this.handb = false;
     }
 
     public void reset(final CheckPoints checkPoints, final int n) {
@@ -645,7 +659,7 @@ public class Control
                     if (checkPoints.stage == 20 || checkPoints.stage == 24) {
                         this.usebounce = false;
                     }
-                    if (this.m.random() > mad.hitmag / mad.cd.maxmag[mad.cn]) {
+                    if (this.m.random() > (float)mad.hitmag / mad.cd.maxmag[mad.cn]) {
                         this.perfection = false;
                     }
                     else {

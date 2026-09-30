@@ -21,6 +21,9 @@ public class Medium
     int[] snap;
     int fogd;
     int mgen;
+    /** When non-null, Medium.random() is deterministic from --seed. */
+    Random rng;
+    public long rngCalls;
     boolean loadnew;
     boolean lightson;
     boolean darksky;
@@ -128,7 +131,14 @@ public class Medium
         this.cfade = new int[] { 255, 220, 220 };
         this.snap = new int[] { 0, 0, 0 };
         this.fogd = 7;
-        this.mgen = (int)(Math.random() * 100000.0);
+        if (Madness.recordSeedSet) {
+            this.rng = new Random(Madness.recordSeed);
+            this.mgen = (int)(this.rng.nextDouble() * 100000.0);
+        }
+        else {
+            this.rng = null;
+            this.mgen = (int)(Math.random() * 100000.0);
+        }
         this.loadnew = false;
         this.lightson = false;
         this.darksky = false;
@@ -182,7 +192,7 @@ public class Medium
         this.atrz = 0L;
         this.fallen = 0;
         this.fo = 1.0f;
-        this.gofo = (float)(0.33000001311302185 + Math.random() * 1.34);
+        this.gofo = (float)(0.33000001311302185 + this.nextUnit() * 1.34);
         this.fvect = 200;
         this.ogpx = null;
         this.ogpz = null;
@@ -226,11 +236,23 @@ public class Medium
         }
     }
 
+    /** Unit interval [0,1): seeded RNG when --seed set, else Math.random(). */
+    public double nextUnit() {
+        if (this.rng != null) {
+            return this.rng.nextDouble();
+        }
+        return Math.random();
+    }
+
     public float random() {
+        ++this.rngCalls;
+        if (System.getenv("NFM_RNGTRACE") != null && this.rngCalls >= 12550L && this.rngCalls <= 12610L) {
+            System.err.println("RNG " + this.rngCalls);
+        }
         if (this.cntrn == 0) {
             for (int i = 0; i < 3; ++i) {
-                this.rand[i] = (int)(10.0 * Math.random());
-                if (Math.random() > Math.random()) {
+                this.rand[i] = (int)(10.0 * this.nextUnit());
+                if (this.nextUnit() > this.nextUnit()) {
                     this.diup[i] = false;
                 }
                 else {
@@ -264,7 +286,11 @@ public class Medium
         if (this.trn == 3) {
             this.trn = 0;
         }
-        return this.rand[this.trn] / 10.0f;
+        final float out = this.rand[this.trn] / 10.0f;
+        if (System.getenv("NFM_RNGVAL") != null && this.rngCalls >= 12550L && this.rngCalls <= 12610L) {
+            System.err.println("RNGVAL " + this.rngCalls + " -> " + out);
+        }
+        return out;
     }
 
     public void watch(final ContO contO, final int n) {
@@ -1860,9 +1886,11 @@ public class Medium
                 array[3] = this.w;
                 array2[3] = array2[0];
                 ys = array2[0];
-                n11 *= (int)0.991;
-                n12 *= (int)0.991;
-                n13 *= (int)0.998;
+                // Decompiler turned `n11 = (int)(n11 * 0.991)` into `n11 *= (int)0.991`,
+                // which is `n11 *= 0` and paints the upper sky solid black.
+                n11 = (int)(n11 * 0.991f);
+                n12 = (int)(n12 * 0.991f);
+                n13 = (int)(n13 * 0.998f);
                 if (array2[1] > this.ih && array2[0] < this.h) {
                     graphics2D.setColor(new Color(n11, n12, n13));
                     graphics2D.fillPolygon(array, array2, 4);

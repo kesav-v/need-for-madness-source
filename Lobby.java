@@ -6755,10 +6755,10 @@ public class Lobby implements Runnable
                                                     this.m.hit = 20000;
                                                     this.m.fallen = 0;
                                                     this.m.nrnd = 0;
-                                                    this.m.ih = 25;
-                                                    this.m.iw = 65;
-                                                    this.m.h = 425;
-                                                    this.m.w = 735;
+                                                    this.m.ih = 0;
+                                                    this.m.iw = 0;
+                                                    this.m.h = 450;
+                                                    this.m.w = 800;
                                                     this.m.trk = 4;
                                                     this.plsndt = 0;
                                                     this.addstage = 0;
@@ -7148,10 +7148,10 @@ public class Lobby implements Runnable
                                 this.m.hit = 20000;
                                 this.m.fallen = 500;
                                 this.m.nrnd = 0;
-                                this.m.ih = 25;
-                                this.m.iw = 65;
-                                this.m.h = 425;
-                                this.m.w = 735;
+                                this.m.ih = 0;
+                                this.m.iw = 0;
+                                this.m.h = 450;
+                                this.m.w = 800;
                                 this.m.trk = 4;
                                 this.plsndt = 0;
                                 if (this.gs.cmsg.isShowing()) {

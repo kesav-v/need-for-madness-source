@@ -87,6 +87,14 @@ public class ModSlayer extends ModuleSlayer
         this.def_bpm = bpmflex;
     }
 
+    /** Amiga period to 12.12 fixed sample-step (must match {@link #mixtrack_16_mono} unpack). */
+    private static int pitchForPeriod(final int finetuneRate, final int period) {
+        if (period <= 0) {
+            return 0;
+        }
+        return (int)(((long) finetuneRate << 12) / period);
+    }
+
     final void beattrack(final ModTrackInfo modtrackinfo) {
         if (modtrackinfo.period_low_limit == 0) {
             modtrackinfo.period_low_limit = 1;
@@ -104,7 +112,7 @@ public class ModSlayer extends ModuleSlayer
             if ((modtrackinfo.period += modtrackinfo.port_down) > modtrackinfo.period_high_limit) {
                 modtrackinfo.period = modtrackinfo.period_high_limit;
             }
-            modtrackinfo.pitch = modtrackinfo.finetune_rate / modtrackinfo.period;
+            modtrackinfo.pitch = pitchForPeriod(modtrackinfo.finetune_rate, modtrackinfo.period);
         }
         if ((modtrackinfo.effect & 0x4) != 0x0) {
             if ((modtrackinfo.period -= modtrackinfo.port_up) < modtrackinfo.period_low_limit) {
@@ -115,7 +123,7 @@ public class ModSlayer extends ModuleSlayer
                     modtrackinfo.period = modtrackinfo.period_low_limit;
                 }
             }
-            modtrackinfo.pitch = modtrackinfo.finetune_rate / modtrackinfo.period;
+            modtrackinfo.pitch = pitchForPeriod(modtrackinfo.finetune_rate, modtrackinfo.period);
         }
         if ((modtrackinfo.effect & 0x20) != 0x0) {
             if (modtrackinfo.portto < modtrackinfo.period) {
@@ -126,7 +134,7 @@ public class ModSlayer extends ModuleSlayer
             else if (modtrackinfo.portto > modtrackinfo.period && (modtrackinfo.period -= modtrackinfo.port_inc) < modtrackinfo.portto) {
                 modtrackinfo.period = modtrackinfo.portto;
             }
-            modtrackinfo.pitch = modtrackinfo.finetune_rate / modtrackinfo.period;
+            modtrackinfo.pitch = pitchForPeriod(modtrackinfo.finetune_rate, modtrackinfo.period);
         }
         if ((modtrackinfo.effect & 0x8) != 0x0) {
             modtrackinfo.vibpos += modtrackinfo.vib_rate << 2;
@@ -144,10 +152,10 @@ public class ModSlayer extends ModuleSlayer
                 }
             }
             i = ((i > 0) ? i : 1);
-            modtrackinfo.pitch = modtrackinfo.finetune_rate / i;
+            modtrackinfo.pitch = pitchForPeriod(modtrackinfo.finetune_rate, i);
         }
         if ((modtrackinfo.effect & 0x10) != 0x0) {
-            modtrackinfo.pitch = modtrackinfo.finetune_rate / modtrackinfo.arp[modtrackinfo.arpindex];
+            modtrackinfo.pitch = pitchForPeriod(modtrackinfo.finetune_rate, modtrackinfo.arp[modtrackinfo.arpindex]);
             ++modtrackinfo.arpindex;
             if (modtrackinfo.arpindex >= 3) {
                 modtrackinfo.arpindex = 0;
@@ -186,7 +194,7 @@ public class ModSlayer extends ModuleSlayer
                 final int n = i_3_;
                 modtrackinfo.period = n;
                 modtrackinfo.start_period = n;
-                modtrackinfo.pitch = modtrackinfo.finetune_rate / i_3_;
+                modtrackinfo.pitch = pitchForPeriod(modtrackinfo.finetune_rate, i_3_);
                 modtrackinfo.position = 0;
             }
         }
@@ -311,7 +319,7 @@ public class ModSlayer extends ModuleSlayer
                                 if (modtrackinfo.period > modtrackinfo.period_high_limit) {
                                     modtrackinfo.period = modtrackinfo.period_high_limit;
                                 }
-                                modtrackinfo.pitch = modtrackinfo.finetune_rate / modtrackinfo.period;
+                                modtrackinfo.pitch = pitchForPeriod(modtrackinfo.finetune_rate, modtrackinfo.period);
                                 break Label_1262;
                             }
                             case 2: {
@@ -319,7 +327,7 @@ public class ModSlayer extends ModuleSlayer
                                 if (modtrackinfo.period < modtrackinfo.period_low_limit) {
                                     modtrackinfo.period = modtrackinfo.period_low_limit;
                                 }
-                                modtrackinfo.pitch = modtrackinfo.finetune_rate / modtrackinfo.period;
+                                modtrackinfo.pitch = pitchForPeriod(modtrackinfo.finetune_rate, modtrackinfo.period);
                                 break Label_1262;
                             }
                             case 6: {
@@ -549,7 +557,8 @@ public class ModSlayer extends ModuleSlayer
                         }
                     }
                 }
-                if (this.oln + real_samples < 18000000) {
+                final int outBytes = real_samples * 2;
+                if (this.oln + outBytes <= 18000000) {
                     if (calvol) {
                         int niu = 0;
                         int cav = 0;
@@ -566,7 +575,7 @@ public class ModSlayer extends ModuleSlayer
                         }
                     }
                     intToBytes16(buf, realbytes, real_samples, this.oln);
-                    this.oln += real_samples;
+                    this.oln += outBytes;
                 }
             }
             if (this.loopMark) {
@@ -577,15 +586,21 @@ public class ModSlayer extends ModuleSlayer
         if (calvol) {
             this.olav /= olniu;
         }
-        ++this.oln;
         return realbytes;
     }
 
     public static void intToBytes16(final int[] sample, final byte[] buffer, final int realsamples, final int oln) {
         int byteOffset = oln;
         for (int i = 0; i < realsamples; ++i) {
-            buffer[byteOffset++] = (byte)(sample[i] >> 8);
-            buffer[byteOffset] = (byte)(sample[i] & 0xFF);
+            int s = sample[i];
+            if (s > 32767) {
+                s = 32767;
+            }
+            if (s < -32768) {
+                s = -32768;
+            }
+            buffer[byteOffset++] = (byte)(s & 0xFF);
+            buffer[byteOffset++] = (byte)((s >> 8) & 0xFF);
         }
     }
 
@@ -599,7 +614,7 @@ public class ModSlayer extends ModuleSlayer
         this.bpm = this.def_bpm;
         this.row = 64;
         this.break_row = 0;
-        this.bpm_samples = this.samplingrate / (24 * this.bpm / 60) * this.oversample;
+        this.bpm_samples = (int)(this.samplingrate * 60L / (24L * this.bpm) * this.oversample);
         this.numtracks = this.mod.numtracks;
         this.tracks = new ModTrackInfo[this.numtracks];
         for (int i = 0; i < this.tracks.length; ++i) {

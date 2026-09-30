@@ -84,7 +84,7 @@ public class CheckPoints
         if (!this.haltall) {
             this.pcleared = array[n2].pcleared;
             for (int i = 0; i < n; ++i) {
-                this.magperc[i] = array[i].hitmag / array[i].cd.maxmag[array[i].cn];
+                this.magperc[i] = (float)array[i].hitmag / array[i].cd.maxmag[array[i].cn];
                 if (this.magperc[i] > 1.0f) {
                     this.magperc[i] = 1.0f;
                 }

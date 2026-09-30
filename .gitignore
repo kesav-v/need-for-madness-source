@@ -1,2 +1,25 @@
 BUILD
 *.class
+*.o
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# C engine build + extracted models (unzip via make models)
+c/build/
+c/assets/models/
+
+# Nested upstream clone / build products (use pufferlib_nfm/ overlay instead)
+PufferLib/
+cpp/
+
+# Training dumps / local runs
+OBJ/**/*.nfmst
+OBJ/**/*.pt
+OBJ/**/*.npz
+OBJ/**/*.log
+OBJ/ppo_runs/
+OBJ/cp_multistage/
+OBJ/cp_multistage_v2/
+OBJ/data/user.data

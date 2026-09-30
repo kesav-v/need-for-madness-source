@@ -34,9 +34,9 @@ import java.awt.TextArea;
 import java.awt.TextField;
 import java.awt.Image;
 import java.awt.Graphics2D;
-import java.applet.Applet;
+import java.awt.Panel;
 
-public class GameSparker extends Applet implements Runnable
+public class GameSparker extends Panel implements Runnable
 {
     Graphics2D rd;
     Image offImage;
@@ -48,6 +48,9 @@ public class GameSparker extends Applet implements Runnable
     float apmult;
     float reqmult;
     int smooth;
+    /** Live demo recorders (finished on race end or window close). */
+    private StateRecorder liveStateRecorder;
+    private ActionRecorder liveActionRecorder;
     int moto;
     int lastw;
     int lasth;
@@ -62,6 +65,7 @@ public class GameSparker extends Applet implements Runnable
     Image[] carmaker;
     Image[] stagemaker;
     int showsize;
+    boolean racing;
     Control[] u;
     int mouses;
     int xm;
@@ -239,8 +243,59 @@ public class GameSparker extends Applet implements Runnable
         }
         xtGraphics.stoploading();
         this.requestFocus();
-        if (xtGraphics.testdrive == 0 && xtGraphics.firstime) {
+        if (xtGraphics.testdrive == 0 && xtGraphics.firstime && !Madness.autorace) {
             this.setupini();
+        }
+        FrameRecorder recorder = null;
+        StateRecorder stateRecorder = null;
+        ActionRecorder actionRecorder = null;
+        this.liveStateRecorder = null;
+        this.liveActionRecorder = null;
+        final StatePlayer statePlayer = Madness.statePlayer;
+        final SimProfiler simProf = (Madness.recordNoRender && Madness.recordProfile)
+            ? new SimProfiler() : null;
+        SimProfiler.active = simProf;
+        long raceStartMs = 0L;
+        boolean raceStarted = false;
+        boolean finishingRecord = false;
+        boolean replayDone = false;
+        int simTicks = 0;
+        long profTickT0 = 0L;
+        boolean profTickOpen = false;
+        // After player 0 is wasted, keep simulating this many ticks then stop (3s of game time).
+        int p0WastedTicks = -1;
+        if (Madness.autorace) {
+            Control.autodrive = Control.autodrive; // keep --forward if set
+            xtGraphics.sc[0] = Madness.autocar;
+            xtGraphics.gmode = 0;
+            xtGraphics.unlocked[0] = 11;
+            xtGraphics.unlocked[1] = 17;
+            xtGraphics.nplayers = Madness.humanPlay ? 1 : 7;
+            xtGraphics.firstime = false;
+            checkPoints.stage = Madness.autostage;
+            checkPoints.top20 = 0;
+            xtGraphics.fase = 2;
+            if (Madness.replaying && statePlayer != null) {
+                xtGraphics.nplayers = statePlayer.nplayers;
+                for (int i = 0; i < statePlayer.nplayers; ++i) {
+                    xtGraphics.sc[i] = statePlayer.sc[i];
+                }
+                xtGraphics.sc[0] = statePlayer.sc[0];
+                Madness.autocar = statePlayer.sc[0];
+            }
+            // Human demos write .nfmst (not mp4); skip FrameRecorder.
+            if (Madness.recordOut != null && !Madness.recordOut.equals("")
+                    && !Madness.recordNoRender && !Madness.humanPlay
+                    && !Madness.recordOut.endsWith(".nfmst")) {
+                try {
+                    recorder = new FrameRecorder(Madness.recordOut, 800, 450, Madness.recordFps);
+                    recorder.start();
+                }
+                catch (Exception ex) {
+                    System.err.println("[record] failed to start: " + ex.getMessage());
+                    System.exit(1);
+                }
+            }
         }
         System.gc();
         long time = new Date().getTime();
@@ -256,6 +311,9 @@ public class GameSparker extends Applet implements Runnable
         int n12 = 0;
         while (true) {
             final long time2 = new Date().getTime();
+            if (Madness.autorace && xtGraphics.fase == 111) {
+                xtGraphics.fase = 2;
+            }
             if (xtGraphics.fase == 111) {
                 if (this.mouses == 1) {
                     n9 = 800;
@@ -267,7 +325,9 @@ public class GameSparker extends Applet implements Runnable
                 else {
                     n9 = 0;
                     if (!this.exwist) {
-                        xtGraphics.fase = 9;
+                        // Skip Radicalplay welcome animation; go straight to main menu
+                        xtGraphics.fase = 10;
+                        this.u[0].falseo(0);
                     }
                     this.mouses = 0;
                     this.lostfcs = false;
@@ -415,6 +475,9 @@ public class GameSparker extends Applet implements Runnable
                 this.drawms();
             }
             if (xtGraphics.fase == 6) {
+                if (Madness.autorace) {
+                    this.u[0].enter = true;
+                }
                 xtGraphics.musicomp(checkPoints.stage, this.u[0]);
                 xtGraphics.ctachm(this.xm, this.ym, this.mouses, this.u[0]);
                 if (this.mouses == 2) {
@@ -426,7 +489,30 @@ public class GameSparker extends Applet implements Runnable
             }
             if (xtGraphics.fase == 5) {
                 this.mvect = 100;
-                xtGraphics.loadmusic(checkPoints.stage, checkPoints.trackname, checkPoints.trackvol);
+                if (Madness.recordNoRender) {
+                    // Physics-only sim: no music, no hipnoload UI.
+                    xtGraphics.mutem = true;
+                    xtGraphics.mutes = true;
+                    xtGraphics.fase = 6;
+                }
+                else if (Madness.replaying) {
+                    // Load soundtrack (skip hipnoload UI). Stage 26 lightning syncs to
+                    // the virtual PCM cursor armed by play(); --music enables audible output.
+                    xtGraphics.loadstrack(checkPoints.stage, checkPoints.trackname, checkPoints.trackvol);
+                    if (Madness.recordMute) {
+                        xtGraphics.mutem = true;
+                        xtGraphics.mutes = true;
+                    }
+                    else {
+                        xtGraphics.mutem = false;
+                        xtGraphics.mutes = false;
+                    }
+                    xtGraphics.strack.play();
+                    xtGraphics.fase = 6;
+                }
+                else {
+                    xtGraphics.loadmusic(checkPoints.stage, checkPoints.trackname, checkPoints.trackvol);
+                }
             }
             if (xtGraphics.fase == 4) {
                 xtGraphics.cantgo(this.u[0]);
@@ -455,6 +541,17 @@ public class GameSparker extends Applet implements Runnable
                 this.mvect = 20;
             }
             if (xtGraphics.fase == 1) {
+                if (Madness.autorace) {
+                    // Skip orbiting stage preview; jump into music load / race.
+                    xtGraphics.hidos();
+                    xtGraphics.fase = 5;
+                    this.u[0].falseo(0);
+                    if (xtGraphics.intertrack != null) {
+                        xtGraphics.intertrack.stop();
+                        xtGraphics.intertrack.unloadimod();
+                    }
+                }
+                else {
                 xtGraphics.trackbg(false);
                 this.rd.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
                 if (checkPoints.stage != -3) {
@@ -523,6 +620,7 @@ public class GameSparker extends Applet implements Runnable
                 this.rd.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 xtGraphics.stageselect(checkPoints, this.u[0], this.xm, this.ym, this.moused);
                 this.drawms();
+                }
             }
             if (xtGraphics.fase == 1177) {
                 this.mvect = 100;
@@ -660,6 +758,7 @@ public class GameSparker extends Applet implements Runnable
                     if (lobby.fase == 3) {
                         xtGraphics.trackbg(false);
                         medium.trk = 0;
+                        this.racing = false;
                         medium.focus_point = 400;
                         medium.crs = true;
                         medium.x = -335;
@@ -897,58 +996,159 @@ public class GameSparker extends Applet implements Runnable
                         array3[n34].newcar = false;
                     }
                 }
-                medium.d(this.rd);
-                int n35 = 0;
-                final int[] array16 = new int[200];
-                for (int n36 = 0; n36 < this.nob; ++n36) {
-                    if (array2[n36].dist != 0) {
-                        array16[n35] = n36;
-                        ++n35;
-                    }
-                    else {
-                        array2[n36].d(this.rd);
-                    }
-                }
-                final int[] array17 = new int[n35];
-                final int[] array18 = new int[n35];
-                for (int n37 = 0; n37 < n35; ++n37) {
-                    array17[n37] = 0;
-                }
-                for (int n38 = 0; n38 < n35; ++n38) {
-                    for (int n39 = n38 + 1; n39 < n35; ++n39) {
-                        if (array2[array16[n38]].dist < array2[array16[n39]].dist) {
-                            final int[] array19 = array17;
-                            final int n40 = n38;
-                            ++array19[n40];
+                if (!Madness.recordNoRender) {
+                    medium.d(this.rd);
+                    int n35 = 0;
+                    final int[] array16 = new int[200];
+                    for (int n36 = 0; n36 < this.nob; ++n36) {
+                        if (array2[n36].dist != 0) {
+                            array16[n35] = n36;
+                            ++n35;
                         }
                         else {
-                            final int[] array20 = array17;
-                            final int n41 = n39;
-                            ++array20[n41];
+                            array2[n36].d(this.rd);
                         }
                     }
-                    array18[array17[n38]] = n38;
-                }
-                for (int n42 = 0; n42 < n35; ++n42) {
-                    array2[array16[array18[n42]]].d(this.rd);
-                }
-                if (xtGraphics.starcnt == 0) {
-                    for (int n43 = 0; n43 < xtGraphics.nplayers; ++n43) {
-                        for (int n44 = 0; n44 < xtGraphics.nplayers; ++n44) {
-                            if (n44 != n43) {
-                                array3[n43].colide(array2[n43], array3[n44], array2[n44]);
+                    final int[] array17 = new int[n35];
+                    final int[] array18 = new int[n35];
+                    for (int n37 = 0; n37 < n35; ++n37) {
+                        array17[n37] = 0;
+                    }
+                    for (int n38 = 0; n38 < n35; ++n38) {
+                        for (int n39 = n38 + 1; n39 < n35; ++n39) {
+                            if (array2[array16[n38]].dist < array2[array16[n39]].dist) {
+                                final int[] array19 = array17;
+                                final int n40 = n38;
+                                ++array19[n40];
+                            }
+                            else {
+                                final int[] array20 = array17;
+                                final int n41 = n39;
+                                ++array20[n41];
                             }
                         }
+                        array18[array17[n38]] = n38;
                     }
-                    for (int n45 = 0; n45 < xtGraphics.nplayers; ++n45) {
-                        array3[n45].drive(this.u[n45], array2[n45], trackers, checkPoints);
+                    for (int n42 = 0; n42 < n35; ++n42) {
+                        array2[array16[array18[n42]]].d(this.rd);
                     }
-                    for (int n46 = 0; n46 < xtGraphics.nplayers; ++n46) {
-                        record.rec(array2[n46], n46, array3[n46].squash, array3[n46].lastcolido, array3[n46].cntdest, 0);
+                }
+                if (xtGraphics.starcnt == 0) {
+                    if (Madness.replaying && statePlayer != null) {
+                        try {
+                            if (!statePlayer.apply(array2, array3)) {
+                                replayDone = true;
+                            }
+                            else {
+                                checkPoints.checkstat(array3, array2, record, xtGraphics.nplayers, xtGraphics.im, 0);
+                            }
+                        }
+                        catch (Exception ex) {
+                            System.err.println("[replay] apply failed: " + ex.getMessage());
+                            replayDone = true;
+                        }
                     }
-                    checkPoints.checkstat(array3, array2, record, xtGraphics.nplayers, xtGraphics.im, 0);
-                    for (int n47 = 1; n47 < xtGraphics.nplayers; ++n47) {
-                        this.u[n47].preform(array3[n47], array2[n47], checkPoints, trackers);
+                    else {
+                        final boolean prof = simProf != null;
+                        if (prof) {
+                            profTickT0 = System.nanoTime();
+                            profTickOpen = true;
+                        }
+                        long t0 = profTickT0;
+                        final int _fr = (stateRecorder != null) ? stateRecorder.framesWritten() : -1;
+                        final boolean _ph = System.getenv("NFM_RNGFRAME") != null && _fr >= 3760 && _fr <= 3770;
+                        if (_ph) System.err.println("F" + _fr + " start rng=" + medium.rngCalls + " hm4=" + array3[4].hitmag);
+                        for (int n43 = 0; n43 < xtGraphics.nplayers; ++n43) {
+                            for (int n44 = 0; n44 < xtGraphics.nplayers; ++n44) {
+                                if (n44 != n43) {
+                                    array3[n43].colide(array2[n43], array3[n44], array2[n44]);
+                                }
+                            }
+                        }
+                        if (prof) {
+                            simProf.add("colide", System.nanoTime() - t0);
+                            t0 = System.nanoTime();
+                        }
+                        if (_ph) System.err.println("F" + _fr + " colide rng=" + medium.rngCalls);
+                        if (System.getenv("NFM_SCDUMP") != null && _fr >= 141 && _fr <= 143) {
+                            final int i = 2;
+                            System.err.println("SC F" + _fr + " im=2 scx=" + array3[i].scx[0] + "," + array3[i].scx[1] + "," + array3[i].scx[2] + "," + array3[i].scx[3]
+                                + " scy=" + array3[i].scy[0] + "," + array3[i].scy[1] + "," + array3[i].scy[2] + "," + array3[i].scy[3]
+                                + " scz=" + array3[i].scz[0] + "," + array3[i].scz[1] + "," + array3[i].scz[2] + "," + array3[i].scz[3]
+                                + " pos=" + array2[i].x + "," + array2[i].y + "," + array2[i].z);
+                        }
+                        if (Control.autodrive) {
+                            this.u[0].applyAutodrive();
+                        }
+                        else if (Madness.autorace && !Madness.humanPlay) {
+                            this.u[0].preform(array3[0], array2[0], checkPoints, trackers);
+                        }
+                        if (prof) {
+                            simProf.add("ai_p0", System.nanoTime() - t0);
+                            t0 = System.nanoTime();
+                        }
+                        if (_ph) System.err.println("F" + _fr + " ai0 rng=" + medium.rngCalls);
+                        for (int n45 = 0; n45 < xtGraphics.nplayers; ++n45) {
+                            final long _r0 = medium.rngCalls;
+                            array3[n45].drive(this.u[n45], array2[n45], trackers, checkPoints);
+                            if (_ph) System.err.println("F" + _fr + " drive_im=" + n45 + " drng=" + (medium.rngCalls - _r0));
+                        }
+                        if (prof) {
+                            simProf.add("drive", System.nanoTime() - t0);
+                            t0 = System.nanoTime();
+                        }
+                        if (_ph) System.err.println("F" + _fr + " drive rng=" + medium.rngCalls);
+                        if (System.getenv("NFM_SCDUMP") != null && _fr >= 141 && _fr <= 143) {
+                            final int i = 2;
+                            System.err.println("SCAD F" + _fr + " im=2 scy=" + array3[i].scy[0] + "," + array3[i].scy[1] + "," + array3[i].scy[2] + "," + array3[i].scy[3]
+                                + " pos=" + array2[i].x + "," + array2[i].y + "," + array2[i].z
+                                + " xz=" + array2[i].xz + " xy=" + array2[i].xy + " zy=" + array2[i].zy + " pzy=" + array3[i].pzy);
+                        }
+                        if (!Madness.recordNoRender || Madness.recordFullFx) {
+                            for (int n46 = 0; n46 < xtGraphics.nplayers; ++n46) {
+                                record.rec(array2[n46], n46, array3[n46].squash, array3[n46].lastcolido, array3[n46].cntdest, 0);
+                            }
+                            if (prof) {
+                                simProf.add("record.rec", System.nanoTime() - t0);
+                                t0 = System.nanoTime();
+                            }
+                        }
+                        checkPoints.checkstat(array3, array2, record, xtGraphics.nplayers, xtGraphics.im, 0);
+                        if (prof) {
+                            simProf.add("checkstat", System.nanoTime() - t0);
+                            t0 = System.nanoTime();
+                        }
+                        if (_ph) System.err.println("F" + _fr + " checkstat rng=" + medium.rngCalls);
+                        for (int n47 = 1; n47 < xtGraphics.nplayers; ++n47) {
+                            this.u[n47].preform(array3[n47], array2[n47], checkPoints, trackers);
+                        }
+                        if (prof) {
+                            simProf.add("ai_others", System.nanoTime() - t0);
+                            t0 = System.nanoTime();
+                        }
+                        if (_ph) System.err.println("F" + _fr + " aiN rng=" + medium.rngCalls);
+                        if (stateRecorder != null) {
+                            try {
+                                if (System.getenv("NFM_RNGFRAME") != null) {
+                                    System.err.println("FRAME " + stateRecorder.framesWritten() + " rng=" + medium.rngCalls + " hm2=" + array3[2].hitmag);
+                                }
+                                stateRecorder.capture(array2, array3, checkPoints);
+                            }
+                            catch (Exception ex) {
+                                System.err.println("[sim] state capture failed: " + ex.getMessage());
+                            }
+                        }
+                        if (actionRecorder != null) {
+                            try {
+                                actionRecorder.capture(this.u[0]);
+                            }
+                            catch (Exception ex) {
+                                System.err.println("[human] action capture failed: " + ex.getMessage());
+                            }
+                        }
+                        if (prof) {
+                            simProf.add("state_io", System.nanoTime() - t0);
+                        }
                     }
                 }
                 else {
@@ -956,8 +1156,10 @@ public class GameSparker extends Applet implements Runnable
                         medium.adv = 1900;
                         medium.zy = 40;
                         medium.vxz = 70;
-                        this.rd.setColor(new Color(255, 255, 255));
-                        this.rd.fillRect(0, 0, 800, 450);
+                        if (!Madness.recordNoRender) {
+                            this.rd.setColor(new Color(255, 255, 255));
+                            this.rd.fillRect(0, 0, 800, 450);
+                        }
                     }
                     if (xtGraphics.starcnt != 0) {
                         final xtGraphics xtGraphics2 = xtGraphics;
@@ -965,9 +1167,18 @@ public class GameSparker extends Applet implements Runnable
                     }
                 }
                 if (xtGraphics.starcnt < 38) {
+                    final boolean profCam = simProf != null && profTickOpen;
+                    final long camT0 = profCam ? System.nanoTime() : 0L;
                     if (this.view == 0) {
                         medium.follow(array2[0], array3[0].cxz, this.u[0].lookback);
+                        if (profCam) {
+                            simProf.add("camera", System.nanoTime() - camT0);
+                        }
+                        final long hudT0 = profCam ? System.nanoTime() : 0L;
                         xtGraphics.stat(array3[0], array2[0], checkPoints, this.u[0], true);
+                        if (profCam) {
+                            simProf.add("hud_stat", System.nanoTime() - hudT0);
+                        }
                         if (array3[0].outshakedam > 0) {
                             this.shaka = array3[0].outshakedam / 20;
                             if (this.shaka > 25) {
@@ -981,13 +1192,29 @@ public class GameSparker extends Applet implements Runnable
                         this.lmxz = medium.xz;
                     }
                     if (this.view == 1) {
+                        final long c1 = profCam ? System.nanoTime() : 0L;
                         medium.around(array2[0], false);
+                        if (profCam) {
+                            simProf.add("camera", System.nanoTime() - c1);
+                        }
+                        final long h1 = profCam ? System.nanoTime() : 0L;
                         xtGraphics.stat(array3[0], array2[0], checkPoints, this.u[0], false);
+                        if (profCam) {
+                            simProf.add("hud_stat", System.nanoTime() - h1);
+                        }
                         this.mvect = 80;
                     }
                     if (this.view == 2) {
+                        final long c2 = profCam ? System.nanoTime() : 0L;
                         medium.watch(array2[0], array3[0].mxz);
+                        if (profCam) {
+                            simProf.add("camera", System.nanoTime() - c2);
+                        }
+                        final long h2 = profCam ? System.nanoTime() : 0L;
                         xtGraphics.stat(array3[0], array2[0], checkPoints, this.u[0], false);
+                        if (profCam) {
+                            simProf.add("hud_stat", System.nanoTime() - h2);
+                        }
                         this.mvect = 65 + Math.abs(this.lmxz - medium.xz) / 5 * 100;
                         if (this.mvect > 90) {
                             this.mvect = 90;
@@ -997,6 +1224,10 @@ public class GameSparker extends Applet implements Runnable
                     if (this.mouses == 1) {
                         this.u[0].enter = true;
                         this.mouses = 0;
+                    }
+                    if (profCam) {
+                        simProf.endTick(System.nanoTime() - profTickT0);
+                        profTickOpen = false;
                     }
                 }
                 else {
@@ -1019,8 +1250,14 @@ public class GameSparker extends Applet implements Runnable
                         checkPoints.checkstat(array3, array2, record, xtGraphics.nplayers, xtGraphics.im, 0);
                         medium.follow(array2[0], array3[0].cxz, 0);
                         xtGraphics.stat(array3[0], array2[0], checkPoints, this.u[0], true);
-                        this.rd.setColor(new Color(255, 255, 255));
-                        this.rd.fillRect(0, 0, 800, 450);
+                        if (!Madness.recordNoRender) {
+                            this.rd.setColor(new Color(255, 255, 255));
+                            this.rd.fillRect(0, 0, 800, 450);
+                        }
+                    }
+                    if (simProf != null && profTickOpen) {
+                        simProf.endTick(System.nanoTime() - profTickT0);
+                        profTickOpen = false;
                     }
                 }
             }
@@ -1100,6 +1337,12 @@ public class GameSparker extends Applet implements Runnable
                     }
                     if (xtGraphics.multion == 1) {
                         int n63 = 1;
+                        if (Control.autodrive) {
+                            this.u[0].applyAutodrive();
+                        }
+                        else if (Madness.autorace && !Madness.humanPlay) {
+                            this.u[0].preform(array3[xtGraphics.im], array2[xtGraphics.im], checkPoints, trackers);
+                        }
                         for (int n64 = 0; n64 < xtGraphics.nplayers; ++n64) {
                             if (xtGraphics.im != n64) {
                                 array3[n64].drive(this.u[n63], array2[n64], trackers, checkPoints);
@@ -1109,11 +1352,19 @@ public class GameSparker extends Applet implements Runnable
                                 array3[n64].drive(this.u[0], array2[n64], trackers, checkPoints);
                             }
                         }
-                        for (int n65 = 0; n65 < xtGraphics.nplayers; ++n65) {
-                            record.rec(array2[n65], n65, array3[n65].squash, array3[n65].lastcolido, array3[n65].cntdest, xtGraphics.im);
+                        if (!Madness.recordNoRender || Madness.recordFullFx) {
+                            for (int n65 = 0; n65 < xtGraphics.nplayers; ++n65) {
+                                record.rec(array2[n65], n65, array3[n65].squash, array3[n65].lastcolido, array3[n65].cntdest, xtGraphics.im);
+                            }
                         }
                     }
                     else {
+                        if (Control.autodrive) {
+                            this.u[0].applyAutodrive();
+                        }
+                        else if (Madness.autorace && !Madness.humanPlay) {
+                            this.u[0].preform(array3[0], array2[0], checkPoints, trackers);
+                        }
                         for (int n66 = 0; n66 < xtGraphics.nplayers; ++n66) {
                             array3[n66].drive(this.u[n66], array2[n66], trackers, checkPoints);
                         }
@@ -1356,10 +1607,12 @@ public class GameSparker extends Applet implements Runnable
                 if (xtGraphics.multion != 0) {
                     udpMistro.UDPquit();
                     xtGraphics.stopchat();
-                    if (this.cmsg.isShowing()) {
+                    if (this.cmsg != null && this.cmsg.isShowing()) {
                         this.cmsg.hide();
                     }
-                    this.cmsg.setText("");
+                    if (this.cmsg != null) {
+                        this.cmsg.setText("");
+                    }
                     this.requestFocus();
                 }
                 if (record.hcaught) {
@@ -1690,8 +1943,186 @@ public class GameSparker extends Applet implements Runnable
                     --this.fcscnt;
                 }
             }
-            this.repaint();
-            if (xtGraphics.im > -1 && xtGraphics.im < 8) {
+            if (!Madness.recordNoRender) {
+                this.repaint();
+            }
+            if (Madness.autorace) {
+                if (xtGraphics.fase == 0 || xtGraphics.fase == -1 || xtGraphics.fase == -3) {
+                    if (!raceStarted) {
+                        raceStarted = true;
+                        raceStartMs = System.currentTimeMillis();
+                        if (Madness.replaying) {
+                            // State dump starts after countdown; jump straight to race frames.
+                            xtGraphics.starcnt = 0;
+                            System.out.println("[replay] race started (re-render from .nfmst)");
+                        }
+                        else if (Madness.humanPlay) {
+                            System.out.println("[human] race " + Madness.humanGameIndex
+                                + "/" + Madness.humanGames + " started — arrows steer, space handbrake"
+                                + " → " + Madness.recordOut);
+                            this.requestFocus();
+                        }
+                        else {
+                            System.out.println(Madness.recordNoRender
+                                ? "[sim] race started (norender, fast sim)"
+                                : "[record] race started (hidden window, fast sim)");
+                        }
+                        if ((Madness.recordNoRender || Madness.humanPlay)
+                                && Madness.recordOut != null && !Madness.recordOut.equals("")) {
+                            try {
+                                stateRecorder = new StateRecorder(
+                                    Madness.recordOut,
+                                    checkPoints.stage,
+                                    Madness.autocar,
+                                    xtGraphics.nplayers,
+                                    checkPoints.nlaps,
+                                    checkPoints.nsp,
+                                    xtGraphics.sc);
+                                this.liveStateRecorder = stateRecorder;
+                            }
+                            catch (Exception ex) {
+                                System.err.println("[sim] failed to open state file: " + ex.getMessage());
+                                System.exit(1);
+                            }
+                        }
+                        if (Madness.humanPlay && Madness.recordOut != null && !Madness.recordOut.equals("")) {
+                            try {
+                                actionRecorder = new ActionRecorder(
+                                    ActionRecorder.sidecarPath(Madness.recordOut),
+                                    checkPoints.stage,
+                                    Madness.autocar,
+                                    xtGraphics.nplayers);
+                                this.liveActionRecorder = actionRecorder;
+                            }
+                            catch (Exception ex) {
+                                System.err.println("[human] failed to open action file: " + ex.getMessage());
+                                System.exit(1);
+                            }
+                        }
+                    }
+                }
+                boolean done = false;
+                if (raceStarted && replayDone) {
+                    done = true;
+                    System.out.println();
+                    System.out.println("[replay] end of state file (frames="
+                        + (statePlayer != null ? statePlayer.frameCount() : 0) + ")");
+                }
+                // Stop ~3s of game time after player 0 is wasted (works for --norender too;
+                // holdit/cntwis depends on playsounds which norender skips).
+                if (raceStarted && !Madness.replaying
+                        && (xtGraphics.fase == 0 || xtGraphics.fase == -1 || xtGraphics.fase == -3)
+                        && array3[0].dest) {
+                    if (p0WastedTicks < 0) {
+                        p0WastedTicks = 0;
+                        System.out.println();
+                        System.out.println((Madness.recordNoRender ? "[sim]" : "[record]")
+                            + " player 0 wasted — finishing in 3s");
+                    }
+                    else {
+                        ++p0WastedTicks;
+                    }
+                    final int holdTicks = Math.max(1, Madness.recordFps) * 3;
+                    if (p0WastedTicks >= holdTicks) {
+                        done = true;
+                        System.out.println();
+                        System.out.println((Madness.recordNoRender ? "[sim]" : "[record]")
+                            + " race finished (p0 wasted + 3s)");
+                    }
+                }
+                if (raceStarted && xtGraphics.holdit && xtGraphics.holdcnt > 60) {
+                    done = true;
+                    System.out.println();
+                    System.out.println(Madness.replaying
+                        ? "[replay] race finished (holdit)"
+                        : (Madness.recordNoRender
+                            ? "[sim] race finished (holdit)"
+                            : "[record] race finished (holdit)"));
+                }
+                if (raceStarted && Madness.recordTimeoutSec > 0
+                        && System.currentTimeMillis() - raceStartMs > Madness.recordTimeoutSec * 1000L) {
+                    done = true;
+                    System.out.println();
+                    System.out.println((Madness.replaying ? "[replay]" : (Madness.recordNoRender ? "[sim]" : "[record]"))
+                        + " timeout after " + Madness.recordTimeoutSec + "s");
+                }
+                if (xtGraphics.fase == -2 && raceStarted) {
+                    done = true;
+                    System.out.println();
+                    System.out.println((Madness.replaying ? "[replay]" : (Madness.recordNoRender ? "[sim]" : "[record]"))
+                        + " race ended (fase -2)");
+                }
+                if (done && !finishingRecord) {
+                    finishingRecord = true;
+                    if (recorder != null) {
+                        FrameRecorder.printBar(1.0f, "done f=" + recorder.frameCount());
+                        FrameRecorder.printBarDone();
+                        recorder.finish();
+                    }
+                    else if (Madness.recordNoRender || Madness.humanPlay) {
+                        if (stateRecorder != null) {
+                            stateRecorder.finish();
+                            this.liveStateRecorder = null;
+                        }
+                        if (actionRecorder != null) {
+                            actionRecorder.finish();
+                            this.liveActionRecorder = null;
+                        }
+                        final long elapsed = System.currentTimeMillis() - raceStartMs;
+                        System.out.println((Madness.humanPlay ? "[human]" : "[sim]") + " done ticks=" + simTicks
+                            + " states=" + (stateRecorder != null ? stateRecorder.frameCount() : 0)
+                            + " actions=" + (actionRecorder != null ? actionRecorder.frameCount() : 0)
+                            + " wall=" + (elapsed / 1000L) + "s"
+                            + (elapsed > 0 && !Madness.humanPlay
+                                ? (" (~" + (simTicks * 1000L / elapsed) + " tick/s)") : ""));
+                        if (simProf != null) {
+                            simProf.report();
+                            SimProfiler.active = null;
+                        }
+                    }
+                    if (statePlayer != null) {
+                        statePlayer.close();
+                    }
+                    if (xtGraphics.strack != null) {
+                        xtGraphics.strack.stop();
+                    }
+                    if (xtGraphics.intertrack != null) {
+                        xtGraphics.intertrack.stop();
+                    }
+                    // Multi-game human collect: reload stage for the next demo.
+                    if (Madness.humanPlay && Madness.humanGameIndex < Madness.humanGames) {
+                        ++Madness.humanGameIndex;
+                        Madness.applyHumanOutPath();
+                        System.out.println("[human] next up " + Madness.humanGameIndex
+                            + "/" + Madness.humanGames + " → " + Madness.recordOut
+                            + " (+ " + ActionRecorder.sidecarPath(Madness.recordOut) + ")");
+                        stateRecorder = null;
+                        actionRecorder = null;
+                        raceStarted = false;
+                        finishingRecord = false;
+                        replayDone = false;
+                        p0WastedTicks = -1;
+                        simTicks = 0;
+                        raceStartMs = 0L;
+                        xtGraphics.holdit = false;
+                        xtGraphics.holdcnt = 0;
+                        if (this.u[0] != null) {
+                            this.u[0].falseo(0);
+                        }
+                        checkPoints.stage = Madness.autostage;
+                        xtGraphics.fase = 2;
+                        this.requestFocus();
+                    }
+                    else {
+                        if (Madness.humanPlay) {
+                            System.out.println("[human] collected " + Madness.humanGameIndex
+                                + "/" + Madness.humanGames + " race(s)");
+                        }
+                        System.exit(0);
+                    }
+                }
+            }
+            if (xtGraphics.im > -1 && xtGraphics.im < 8 && !Madness.recordNoRender) {
                 int im = 0;
                 if (xtGraphics.multion == 2 || xtGraphics.multion == 3) {
                     im = xtGraphics.im;
@@ -1701,7 +2132,9 @@ public class GameSparker extends Applet implements Runnable
                 xtGraphics.playsounds(array3[xtGraphics.im], this.u[im], checkPoints.stage);
             }
             final long time3 = new Date().getTime();
-            if (xtGraphics.fase == 0 || xtGraphics.fase == -1 || xtGraphics.fase == -3 || xtGraphics.fase == 7001) {
+            final boolean fastRecord = Madness.autorace && raceStarted
+                && (recorder != null || Madness.recordNoRender);
+            if (!fastRecord && (xtGraphics.fase == 0 || xtGraphics.fase == -1 || xtGraphics.fase == -3 || xtGraphics.fase == 7001)) {
                 if (n4 == 0) {
                     n5 = 15;
                     n3 = n2;
@@ -1731,7 +2164,7 @@ public class GameSparker extends Applet implements Runnable
                     ++n7;
                 }
             }
-            else {
+            else if (!fastRecord) {
                 if (n4 != 0) {
                     n5 = 30;
                     n2 = n3;
@@ -1772,13 +2205,86 @@ public class GameSparker extends Applet implements Runnable
                 this.gamer.stop();
                 this.gamer = null;
             }
-            long n97 = Math.round(n3) - (time3 - time2);
-            if (n97 < n5) {
-                n97 = n5;
+            long n97;
+            if (fastRecord) {
+                // Physics is 1 tick/frame; stamp video with the nominal game frame time.
+                final int fps = Math.max(1, Madness.recordFps);
+                n97 = Math.round(1000.0 / fps);
+            }
+            else {
+                n97 = Math.round(n3) - (time3 - time2);
+                if (n97 < n5) {
+                    n97 = n5;
+                }
+            }
+            if (fastRecord && recorder != null
+                    && (xtGraphics.fase == 0 || xtGraphics.fase == -1 || xtGraphics.fase == -3)) {
+                try {
+                    recorder.capture(this.offImage, (int)n97);
+                }
+                catch (Exception ex) {
+                    System.err.println("[record] capture failed: " + ex.getMessage());
+                }
+                final long elapsed = System.currentTimeMillis() - raceStartMs;
+                final int need = Math.max(1, checkPoints.nlaps * checkPoints.nsp);
+                float racePct = checkPoints.clear[0] / (float)need;
+                if (racePct > 1.0f) {
+                    racePct = 1.0f;
+                }
+                if (xtGraphics.holdit) {
+                    racePct = 1.0f;
+                }
+                final float timePct = Madness.recordTimeoutSec > 0
+                    ? Math.min(1.0f, elapsed / (Madness.recordTimeoutSec * 1000.0f))
+                    : 0.0f;
+                final float pct = Math.max(racePct, timePct * 0.15f);
+                if (recorder.frameCount() % 15 == 0) {
+                    final int lap = Math.min(checkPoints.nlaps, checkPoints.clear[0] / Math.max(1, checkPoints.nsp) + 1);
+                    final String detail = String.format(
+                        "lap %d/%d  vid=%ds  wall=%ds  f=%d",
+                        lap,
+                        Math.max(1, checkPoints.nlaps),
+                        (int)(recorder.totalSleepMs() / 1000L),
+                        (int)(elapsed / 1000L),
+                        recorder.frameCount());
+                    FrameRecorder.printBar(pct, detail);
+                }
+            }
+            else if (fastRecord && Madness.recordNoRender
+                    && (xtGraphics.fase == 0 || xtGraphics.fase == -1 || xtGraphics.fase == -3)) {
+                ++simTicks;
+                final long elapsed = System.currentTimeMillis() - raceStartMs;
+                final int need = Math.max(1, checkPoints.nlaps * checkPoints.nsp);
+                float racePct = checkPoints.clear[0] / (float)need;
+                if (racePct > 1.0f) {
+                    racePct = 1.0f;
+                }
+                if (xtGraphics.holdit) {
+                    racePct = 1.0f;
+                }
+                final float timePct = Madness.recordTimeoutSec > 0
+                    ? Math.min(1.0f, elapsed / (Madness.recordTimeoutSec * 1000.0f))
+                    : 0.0f;
+                final float pct = Math.max(racePct, timePct * 0.15f);
+                if (simTicks % 200 == 0) {
+                    final int lap = Math.min(checkPoints.nlaps, checkPoints.clear[0] / Math.max(1, checkPoints.nsp) + 1);
+                    final long tps = elapsed > 0 ? (simTicks * 1000L / elapsed) : 0L;
+                    final String detail = String.format(
+                        "lap %d/%d  wall=%ds  t=%d  %d/s",
+                        lap,
+                        Math.max(1, checkPoints.nlaps),
+                        (int)(elapsed / 1000L),
+                        simTicks,
+                        tps);
+                    FrameRecorder.printBar(pct, detail);
+                }
             }
             try {
-                final Thread gamer = this.gamer;
-                Thread.sleep(n97);
+                // Fast-forward while recording: skip sleep; video uses stamped frame durations.
+                if (!fastRecord) {
+                    final Thread gamer = this.gamer;
+                    Thread.sleep(n97);
+                }
             }
             catch (InterruptedException ex) {}
         }
@@ -1875,15 +2381,42 @@ public class GameSparker extends Applet implements Runnable
                     graphics2D.fillRect(this.getWidth() - 208, 14, 158, 23);
                 }
             }
-            this.apx = (int)(this.getWidth() / 2 - 400.0f * this.apmult);
-            this.apy = (int)(this.getHeight() / 2 - 225.0f * this.apmult - 50.0f);
-            if (this.apy < 50) {
-                this.apy = 50;
-            }
-            if (this.apmult > 1.0f) {
-                if (this.smooth == 1) {
-                    graphics2D.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                    if (this.moto == 1) {
+            // During active gameplay (medium.trk==1 means a race is running), stretch
+            // the 800x450 offscreen buffer to fill the entire window so there are no
+            // black bars.  In all other states (menus, loading, etc.) keep the original
+            // centred / scaled positioning.
+            final boolean stretchToFill = this.racing;
+            if (stretchToFill) {
+                this.apx = 0;
+                this.apy = 0;
+                graphics2D.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                if (this.moto == 1) {
+                    graphics2D.setComposite(AlphaComposite.getInstance(3, this.mvect / 100.0f));
+                    graphics2D.drawImage(this.offImage, n, n2, this.getWidth(), this.getHeight(), this);
+                    this.cropit(graphics2D, n, n2);
+                } else {
+                    graphics2D.drawImage(this.offImage, 0, 0, this.getWidth(), this.getHeight(), this);
+                }
+            } else {
+                this.apx = (int)(this.getWidth() / 2 - 400.0f * this.apmult);
+                this.apy = (int)(this.getHeight() / 2 - 225.0f * this.apmult);
+                if (this.apy < 0) {
+                    this.apy = 0;
+                }
+                if (this.apmult > 1.0f) {
+                    if (this.smooth == 1) {
+                        graphics2D.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                        if (this.moto == 1) {
+                            graphics2D.setComposite(AlphaComposite.getInstance(3, this.mvect / 100.0f));
+                            this.rd.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_SPEED);
+                            graphics2D.drawImage(this.offImage, this.apx + n, this.apy + n2, (int)(800.0f * this.apmult), (int)(450.0f * this.apmult), this);
+                            this.cropit(graphics2D, n, n2);
+                        }
+                        else {
+                            graphics2D.drawImage(this.offImage, this.apx, this.apy, (int)(800.0f * this.apmult), (int)(450.0f * this.apmult), this);
+                        }
+                    }
+                    else if (this.moto == 1) {
                         graphics2D.setComposite(AlphaComposite.getInstance(3, this.mvect / 100.0f));
                         this.rd.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_SPEED);
                         graphics2D.drawImage(this.offImage, this.apx + n, this.apy + n2, (int)(800.0f * this.apmult), (int)(450.0f * this.apmult), this);
@@ -1896,21 +2429,12 @@ public class GameSparker extends Applet implements Runnable
                 else if (this.moto == 1) {
                     graphics2D.setComposite(AlphaComposite.getInstance(3, this.mvect / 100.0f));
                     this.rd.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_SPEED);
-                    graphics2D.drawImage(this.offImage, this.apx + n, this.apy + n2, (int)(800.0f * this.apmult), (int)(450.0f * this.apmult), this);
+                    graphics2D.drawImage(this.offImage, this.apx + n, this.apy + n2, this);
                     this.cropit(graphics2D, n, n2);
                 }
                 else {
-                    graphics2D.drawImage(this.offImage, this.apx, this.apy, (int)(800.0f * this.apmult), (int)(450.0f * this.apmult), this);
+                    graphics2D.drawImage(this.offImage, this.apx, this.apy, this);
                 }
-            }
-            else if (this.moto == 1) {
-                graphics2D.setComposite(AlphaComposite.getInstance(3, this.mvect / 100.0f));
-                this.rd.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_SPEED);
-                graphics2D.drawImage(this.offImage, this.apx + n, this.apy + n2, this);
-                this.cropit(graphics2D, n, n2);
-            }
-            else {
-                graphics2D.drawImage(this.offImage, this.apx, this.apy, this);
             }
         }
         else if (this.moto == 1) {
@@ -1952,15 +2476,18 @@ public class GameSparker extends Applet implements Runnable
         this.paint(graphics);
     }
     
-    @Override
     public void init() {
         this.setBackground(new Color(0, 0, 0));
-        this.offImage = this.createImage(800, 450);
-        if (this.offImage != null) {
-            this.rd = (Graphics2D)this.offImage.getGraphics();
-        }
+        // BufferedImage works without a heavyweight peer (needed for headless/record).
+        final java.awt.image.BufferedImage buf = new java.awt.image.BufferedImage(800, 450, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        this.offImage = buf;
+        this.rd = buf.createGraphics();
         this.rd.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         this.rd.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        if (Madness.recordNoRender) {
+            // Physics-only: TextField/Checkbox throw under java.awt.headless.
+            return;
+        }
         this.setLayout(null);
         (this.tnick = new TextField("Nickbname")).setFont(new Font("Arial", 1, 13));
         (this.tpass = new TextField("")).setFont(new Font("Arial", 1, 13));
@@ -2123,6 +2650,9 @@ public class GameSparker extends Applet implements Runnable
     }
     
     public void hidefields() {
+        if (Madness.recordNoRender) {
+            return;
+        }
         this.ilaps.hide();
         this.icars.hide();
         this.proitem.hide();
@@ -2366,6 +2896,7 @@ public class GameSparker extends Applet implements Runnable
         medium.noelec = 0;
         medium.ground = 250;
         medium.trk = 0;
+        this.racing = false;
         this.view = 0;
         int getint = 0;
         int getint2 = 100;
@@ -2734,10 +3265,11 @@ public class GameSparker extends Applet implements Runnable
                 medium.fallen = 0;
                 medium.nrnd = 0;
                 medium.trk = 1;
-                medium.ih = 25;
-                medium.iw = 65;
-                medium.h = 425;
-                medium.w = 735;
+                this.racing = true;
+                medium.ih = 0;
+                medium.iw = 0;
+                medium.h = 450;
+                medium.w = 800;
                 xtGraphics.fase = 1;
                 this.mouses = 0;
             }
@@ -3103,7 +3635,6 @@ public class GameSparker extends Applet implements Runnable
         return string;
     }
     
-    @Override
     public void start() {
         if (this.gamer == null) {
             this.gamer = new Thread(this);
@@ -3111,12 +3642,31 @@ public class GameSparker extends Applet implements Runnable
         this.gamer.start();
     }
     
-    @Override
     public void stop() {
+        if (this.liveActionRecorder != null) {
+            this.liveActionRecorder.finish();
+            this.liveActionRecorder = null;
+        }
+        if (this.liveStateRecorder != null) {
+            this.liveStateRecorder.finish();
+            this.liveStateRecorder = null;
+        }
         if (this.exwist && this.gamer != null) {
             System.gc();
             this.gamer.stop();
             this.gamer = null;
+        }
+        this.exwist = true;
+    }
+
+    public void destroy() {
+        if (this.liveActionRecorder != null) {
+            this.liveActionRecorder.finish();
+            this.liveActionRecorder = null;
+        }
+        if (this.liveStateRecorder != null) {
+            this.liveStateRecorder.finish();
+            this.liveStateRecorder = null;
         }
         this.exwist = true;
     }
@@ -3551,7 +4101,7 @@ public class GameSparker extends Applet implements Runnable
     
     @Override
     public boolean keyDown(final Event event, final int n) {
-        if (!this.exwist) {
+        if (!this.exwist && this.u[0] != null) {
             if (this.u[0].multion < 2) {
                 if (n == 1004) {
                     this.u[0].up = true;

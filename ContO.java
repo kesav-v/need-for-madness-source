@@ -1906,6 +1906,8 @@ public class ContO
     }
 
     public void dust(final int n, final float n2, final float n3, final float n4, final int n5, final int n6, final float n7, final int n8, final boolean b) {
+        final SimProfiler prof = SimProfiler.active;
+        final long _pt = (prof != null) ? System.nanoTime() : 0L;
         boolean b2 = false;
         if (n8 > 5 && (n == 0 || n == 2)) {
             b2 = true;
@@ -1917,18 +1919,30 @@ public class ContO
         if (n9 > 1.0f) {
             n9 = 1.0f;
         }
+        if (System.getenv("NFM_DUSTLOG") != null && this.m.rngCalls >= 12540L && this.m.rngCalls <= 12610L) {
+            System.err.println("DUSTCHK n=" + n + " n9=" + n9 + " b2=" + b2 + " b=" + b + " sc=" + n5 + "," + n6 + " rng=" + this.m.rngCalls);
+        }
         if (n9 > 0.2 && !b2) {
             ++this.ust;
             if (this.ust == 20) {
                 this.ust = 0;
             }
             if (!b) {
+                if (System.getenv("NFM_DRVRNG") != null && this.m.rngCalls >= 221290L && this.m.rngCalls <= 221320L) {
+                    System.err.println("DUSTRNG n=" + n + " n9=" + n9 + " b2=" + b2 + " b=" + b + " sc=" + n5 + "," + n6 + " tilt=" + n8 + " rng=" + this.m.rngCalls);
+                }
+                if (System.getenv("NFM_DUSTLOG") != null) {
+                    System.err.println("DUST n=" + n + " n9=" + n9 + " rng=" + this.m.rngCalls);
+                }
                 final float random = this.m.random();
                 this.sx[this.ust] = (int)((n2 + this.x * random) / (1.0f + random));
                 this.sz[this.ust] = (int)((n4 + this.z * random) / (1.0f + random));
                 this.sy[this.ust] = (int)((n3 + this.y * random) / (1.0f + random));
             }
             else {
+                if (System.getenv("NFM_DRVRNG") != null && this.m.rngCalls >= 221290L && this.m.rngCalls <= 221320L) {
+                    System.err.println("DUSTSKIP_B n=" + n + " n9=" + n9 + " rng=" + this.m.rngCalls);
+                }
                 this.sx[this.ust] = (int)((n2 + (this.x + n5)) / 2.0f);
                 this.sz[this.ust] = (int)((n4 + (this.z + n6)) / 2.0f);
                 this.sy[this.ust] = (int)n3;
@@ -1940,6 +1954,12 @@ public class ContO
             this.scx[this.ust] = n5;
             this.scz[this.ust] = n6;
             this.stg[this.ust] = 1;
+        }
+        else if (System.getenv("NFM_DRVRNG") != null && this.m.rngCalls >= 221290L && this.m.rngCalls <= 221320L) {
+            System.err.println("DUSTSKIP_N9 n=" + n + " n9=" + n9 + " b2=" + b2 + " sc=" + n5 + "," + n6 + " tilt=" + n8 + " rng=" + this.m.rngCalls);
+        }
+        if (prof != null) {
+            prof.add("drv.dust", System.nanoTime() - _pt);
         }
     }
 
@@ -2101,6 +2121,11 @@ public class ContO
     }
 
     public void sprk(final float n, final float n2, final float n3, final float rcx, final float rcy, final float rcz, final int n4) {
+        if (Madness.recordNoRender && !Madness.recordFullFx) {
+            return;
+        }
+        final SimProfiler prof = SimProfiler.active;
+        final long _pt = (prof != null) ? System.nanoTime() : 0L;
         if (n4 != 1) {
             this.srx = (int)(n - this.sprkat * this.m.sin(this.xz));
             this.sry = (int)(n2 - this.sprkat * this.m.cos(this.zy) * this.m.cos(this.xy));
@@ -2127,6 +2152,9 @@ public class ContO
         this.rcx = rcx;
         this.rcy = rcy;
         this.rcz = rcz;
+        if (prof != null) {
+            prof.add("drv.sprk", System.nanoTime() - _pt);
+        }
     }
 
     public void dsprk(final Graphics2D graphics2D, final boolean b) {
