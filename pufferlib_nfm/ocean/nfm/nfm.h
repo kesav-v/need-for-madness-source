@@ -1,6 +1,9 @@
 /* Need for Madness — PufferLib Ocean env (CPU).
  * Obs: float32[52]. Act: MultiDiscrete([2,2,2,2,2]) left/right/up/down/handb.
  * Physics: ../c NfmSim (shared model templates across envs).
+ *
+ * Optional NFMS dump: set [env] record_path = out.nfmst (or NFM_RECORD_PATH).
+ * Records the first episode only, then clears the path.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -45,6 +48,7 @@ struct Env {
 
     char repo_root[512];
     char assets_dir[512];
+    char record_path[512];
 
     struct NfmSim* sim;
 };
@@ -74,6 +78,7 @@ static int nfm_ensure_sim(Nfm* env) {
 
 void puf_reset(Nfm* env) {
     const int seed = env->seed + env->episode_id;
+    const char* rec = NULL;
     ++env->episode_id;
     env->tick = 0;
     env->episode_return = 0.f;
@@ -84,8 +89,10 @@ void puf_reset(Nfm* env) {
         return;
     }
     nfm_sim_set_stall_cut(env->sim, env->stall_cut);
-    if (nfm_sim_reset(env->sim, env->stage, env->car, seed, env->nplayers,
-                      env->max_steps, env->agents[0].observations) != 0) {
+    if (env->record_path[0]) rec = env->record_path;
+    if (nfm_sim_reset_record(env->sim, env->stage, env->car, seed, env->nplayers,
+                             env->max_steps, rec,
+                             env->agents[0].observations) != 0) {
         memset(env->agents[0].observations, 0, sizeof(float) * OBS_SIZE);
     }
 }
@@ -118,6 +125,13 @@ void puf_step(Nfm* env) {
 
     if (terminated || truncated) {
         env->agents[0].terminals[0] = 1.f;
+        if (env->record_path[0]) {
+            int frames = nfm_sim_finish_recording(env->sim);
+            fprintf(stderr, "[nfm] wrote %s frames=%d clear=%d ret=%.2f\n",
+                    env->record_path, frames, clear, env->episode_return + reward);
+            /* One-shot: do not overwrite on auto-reset. */
+            env->record_path[0] = '\0';
+        }
         nfm_add_log(env, reward, place, clear, need);
         puf_reset(env);
     }
@@ -130,6 +144,7 @@ void puf_render(Nfm* env) {
 void puf_close(Nfm* env) {
     if (!env) return;
     if (env->sim) {
+        if (env->record_path[0]) nfm_sim_finish_recording(env->sim);
         nfm_sim_destroy(env->sim);
         env->sim = NULL;
     }
@@ -148,6 +163,8 @@ void puf_log(Log* log, Dict* out) {
 void puf_init(Env* env, Dict* kwargs) {
     const char* root;
     const char* assets;
+    const char* rec;
+    const char* env_rec;
 
     env->num_agents = 1;
     env->stage = (int)dict_get(kwargs, "stage");
@@ -163,11 +180,22 @@ void puf_init(Env* env, Dict* kwargs) {
     env->agents[0].action_mask = NULL;
     env->agents[0].policy = 0;
     memset(&env->log, 0, sizeof(Log));
+    env->record_path[0] = '\0';
 
     root = dict_get_str(kwargs, "repo_root");
     assets = dict_get_str(kwargs, "assets_dir");
     snprintf(env->repo_root, sizeof(env->repo_root), "%s", root);
     snprintf(env->assets_dir, sizeof(env->assets_dir), "%s", assets);
+
+    rec = dict_get_str(kwargs, "record_path");
+    if (rec && rec[0] && strcmp(rec, "None") != 0 && strcmp(rec, "''") != 0 &&
+        strcmp(rec, "\"\"") != 0) {
+        snprintf(env->record_path, sizeof(env->record_path), "%s", rec);
+    }
+    env_rec = getenv("NFM_RECORD_PATH");
+    if ((!env->record_path[0]) && env_rec && env_rec[0]) {
+        snprintf(env->record_path, sizeof(env->record_path), "%s", env_rec);
+    }
 
     if (env->stage <= 0) env->stage = 11;
     if (env->nplayers <= 0) env->nplayers = 1;

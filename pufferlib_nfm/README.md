@@ -15,9 +15,20 @@ cd c && make models gym -j && cd ..
 cd PufferLib && ./build.sh nfm && ./puffer train
 ```
 
-T4 / any NVIDIA GPU with CUDA toolkit + NCCL.
+## Dump `.nfmst` from a `.bin` checkpoint
 
-## Files
+```bash
+./pufferlib_nfm/dump_nfmst.sh PufferLib/checkpoints/nfm/<run>/<step>.bin out.nfmst
+# then: ./generate_video.sh out.nfmst
+```
+
+Or manually (after `./build.sh nfm --cpu`):
+
+```bash
+cd PufferLib
+./nfm checkpoints/nfm/.../foo.bin --headless --eval_episodes=1 \
+  --env.record_path=$PWD/../out.nfmst --env.stall_cut=0 --env.max_steps=8000
+```
 
 | Path | Role |
 |------|------|
