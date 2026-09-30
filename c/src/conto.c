@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "nfm/conto.h"
 #include "nfm/env_flags.h"
 
