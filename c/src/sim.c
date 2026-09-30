@@ -293,32 +293,28 @@ static void finish_step(NfmSim* s, NfmSimStepResult* r, bool stall_cut) {
   sync_route_target(s);
   dist = route_dist(s, 0);
   speed = s->mad[0].speed;
+  /* Dense progress + light penalties. Clears are the main sparse jackpot. */
   shaped = 0.f;
   if (dclear == 0) {
     const float dprog = s->prev_cp_dist - dist;
-    shaped = (speed > 1.f) ? dprog : fminf(dprog, 0.f);
+    shaped = (speed > 1.f) ? (10.f * dprog) : fminf(10.f * dprog, 0.f);
   }
-  r->reward = shaped + (float)dclear * 20.f;
+  r->reward = shaped + (float)dclear * 5.f;
   r->reward -= 0.001f;
-  if (fabsf(speed) < 5.f) {
-    r->reward -= 0.15f;
-  } else if (fabsf(speed) < 20.f) {
-    r->reward -= 0.03f;
-  }
-  if (speed < -1.f) r->reward -= 0.05f;
-  if (s->mad[0].dest) r->reward -= 1.f;
+  if (fabsf(speed) < 5.f) r->reward -= 0.01f;
+  if (speed < -1.f) r->reward -= 0.02f;
+  if (s->mad[0].dest) r->reward -= 0.5f;
 
   need = s->cp.nlaps * s->cp.nsp;
   if (s->nplayers > 1) {
     if (fabsf(speed) > 15.f || dclear > 0) {
       r->reward += (float)(s->prev_pos - pos) * 8.f;
     }
-    r->reward -= 0.001f;
   }
   if (dclear > 0 && clear >= need) {
     r->reward += 80.f + 25.f * (float)(s->nplayers - 1 - pos);
     if (pos == 0) r->reward += 150.f;
-  } else if (dclear > 0 && pos <= 2) {
+  } else if (dclear > 0 && s->nplayers > 1 && pos <= 2) {
     r->reward += 12.f;
   }
 
@@ -335,7 +331,8 @@ static void finish_step(NfmSim* s, NfmSimStepResult* r, bool stall_cut) {
   } else {
     ++s->stall_ticks;
   }
-  if (s->stall_ticks > kStallGrace) {
+  /* Stall penalty/truncate only when stall_cut is on (off for early learning). */
+  if (stall_cut && s->stall_ticks > kStallGrace) {
     const float t =
         fminf((float)(s->stall_ticks - kStallGrace) / 20.f, 8.f);
     r->reward -= 0.05f * t;
